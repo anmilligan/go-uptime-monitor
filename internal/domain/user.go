@@ -7,19 +7,19 @@ import (
 )
 
 type User struct {
-	id         int       // id в нашей бд
-	telegramID int       // цифровой id телеграмма
-	username   string    // никнейм в системе
-	createdAt  time.Time // время регистрации
+	ID         int       // id в нашей бд
+	TelegramID int       // цифровой id телеграмма
+	Username   string    // никнейм в системе
+	CreatedAt  time.Time // время регистрации
 }
 
-func (u *User) Valodate() error {
-	u.username = strings.TrimSpace(u.username)
+func (u *User) Validate() error {
+	u.Username = strings.TrimSpace(u.Username)
 
-	if u.username == "" {
+	if u.Username == "" {
 		return errors.New("Имя не может быть пустым")
 	}
-	if len(u.username) < 3 {
+	if len(u.Username) < 3 {
 		return errors.New("Имя пользователя должно содержать минимум 3 символа")
 	}
 	return nil
