@@ -15,14 +15,19 @@ type CheckAndIncidentRepo interface { // интерфейс со списком 
 	CloseIncident(ctx context.Context, incidentID int, closedAt time.Time) error
 	CreateAlert(ctx context.Context, alert *domain.Alert) error
 }
-
-type ProcessCheckUseCase struct {
-	repo CheckAndIncidentRepo
+type AlertCreator interface {
+	Execute(ctx context.Context, targetID int, alertType string, message string) error
 }
 
-func NewProcessCheckUseCase(repo CheckAndIncidentRepo) *ProcessCheckUseCase {
+type ProcessCheckUseCase struct {
+	repo  CheckAndIncidentRepo
+	alert AlertCreator
+}
+
+func NewProcessCheckUseCase(repo CheckAndIncidentRepo, alert *CreateAlertUseCase) *ProcessCheckUseCase {
 	return &ProcessCheckUseCase{
-		repo: repo,
+		repo:  repo,
+		alert: alert,
 	}
 }
 
@@ -78,7 +83,15 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		Status:    "OPEN",
 		CreatedAt: time.Now(),
 	}
-	return uc.repo.CreateIncident(ctx, incident)
+	if err := uc.repo.CreateIncident(ctx, incident); err != nil {
+		return err
+	}
+	return uc.alert.Execute(
+		ctx,
+		target.ID,
+		"DOWN",
+		"🔴 Сайт недоступен",
+	)
 }
 
 func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domain.Target) error { // создаем метод восстановления
@@ -91,5 +104,14 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 	}
 	closedAt := time.Now()
 
-	return uc.repo.CloseIncident(ctx, openIncident.ID, closedAt) // отправляем в базу данных команду обновить запись, чтобы сохранить время закрытия и статус инцидента
+	if err := uc.repo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil {
+		return err
+	}
+
+	return uc.alert.Execute(
+		ctx,
+		target.ID,
+		"UP",
+		"🟢 Сайт снова доступен",
+	)
 }
