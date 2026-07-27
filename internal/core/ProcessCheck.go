@@ -3,7 +3,6 @@ package core
 import (
 	"Uptime_Monitor/internal/domain"
 	"context"
-	"errors"
 	"time"
 )
 
@@ -13,8 +12,8 @@ type CheckAndIncidentRepo interface { // интерфейс со списком 
 	GetOpenIncident(ctx context.Context, targetID int) (*domain.Incident, error)
 	CreateIncident(ctx context.Context, incident *domain.Incident) error
 	CloseIncident(ctx context.Context, incidentID int, closedAt time.Time) error
-	CreateAlert(ctx context.Context, alert *domain.Alert) error
 }
+
 type AlertCreator interface {
 	Execute(ctx context.Context, targetID int, alertType string, message string) error
 }
@@ -24,7 +23,7 @@ type ProcessCheckUseCase struct {
 	alert AlertCreator
 }
 
-func NewProcessCheckUseCase(repo CheckAndIncidentRepo, alert *CreateAlertUseCase) *ProcessCheckUseCase {
+func NewProcessCheckUseCase(repo CheckAndIncidentRepo, alert AlertCreator) *ProcessCheckUseCase {
 	return &ProcessCheckUseCase{
 		repo:  repo,
 		alert: alert,
@@ -53,7 +52,8 @@ func (uc *ProcessCheckUseCase) Execute(ctx context.Context, target *domain.Targe
 }
 
 func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain.Target, limit int) error {
-	existing, err := uc.repo.GetOpenIncident(ctx, target.ID) // проверяем не открыт ли инцидент уже
+	existing, err := uc.repo.GetOpenIncident(ctx, target.ID)
+	// проверяем не открыт ли инцидент уже
 	if err != nil {
 		return err
 	}
@@ -73,9 +73,11 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		} else {
 			break // наткнулись на успешную проверку — серия прервалась
 		}
-		if limit <= 0 {
-			return errors.New("лимит последовательных ошибок должен быть больше нуля")
-		}
+
+	}
+
+	if failuresCount < limit { // недостаточно ошибок подряд, чтобы вернуть инцидент
+		return nil
 	}
 
 	incident := &domain.Incident{
@@ -83,10 +85,12 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		Status:    "OPEN",
 		CreatedAt: time.Now(),
 	}
+
 	if err := uc.repo.CreateIncident(ctx, incident); err != nil {
 		return err
 	}
-	return uc.alert.Execute(
+
+	return uc.alert.Execute( // отправляем событие создания alert
 		ctx,
 		target.ID,
 		"DOWN",
@@ -95,7 +99,7 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 }
 
 func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domain.Target) error { // создаем метод восстановления
-	openIncident, err := uc.repo.GetOpenIncident(ctx, target.ID) // ищем активный инцидент
+	openIncident, err := uc.repo.GetOpenIncident(ctx, target.ID) // получаем открытый инцидент
 	if err != nil {
 		return err
 	}
@@ -104,11 +108,11 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 	}
 	closedAt := time.Now()
 
-	if err := uc.repo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil {
+	if err := uc.repo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil { // закрываем инцидент
 		return err
 	}
 
-	return uc.alert.Execute(
+	return uc.alert.Execute( // создали alert
 		ctx,
 		target.ID,
 		"UP",

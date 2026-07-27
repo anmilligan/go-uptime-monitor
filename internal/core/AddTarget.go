@@ -22,7 +22,8 @@ func NewAddTargetUseCase(repo TargetRepository) *AddTargetUseCase { // функ�
 
 type AddTargetRequest struct { // параметры описываемые пользователем
 	UserID         int
-	URL            string
+	Kind           string
+	Address        string
 	Interval       time.Duration
 	Timeout        time.Duration
 	ExpectedStatus int
@@ -32,7 +33,7 @@ type AddTargetRequest struct { // параметры описываемые по
 func (uc *AddTargetUseCase) Execute(ctx context.Context, req AddTargetRequest) (*domain.Target, error) { // инструкция по добавлению сайта
 	target := &domain.Target{
 		UserID:         req.UserID,
-		URL:            req.URL,
+		Kind:           req.Kind,
 		Interval:       req.Interval,
 		Timeout:        req.Timeout,
 		ExpectedStatus: req.ExpectedStatus,
