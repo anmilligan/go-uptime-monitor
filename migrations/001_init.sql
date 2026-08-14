@@ -1,6 +1,3 @@
-package migrations
-
-
 CREATE TABLE users (
 	id BIGSERIAL PRIMARY KEY,
 	telegram_id BIGINT NOT NULL UNIQUE,
@@ -70,4 +67,18 @@ CREATE TABLE alerts (
 
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
+
+
+CREATE INDEX idx_targets_user_id
+ON targets(user_id)
+
+CREATE INDEX idx_checks_target_checked_at
+ON checks(target_id, checked_at DESC)
+
+CREATE INDEX idx_incidents_open
+ON incidents(target_id)
+WHERE status = 'OPEN'
+
+CREATE INDEX idx_alerts_incident_id
+ON alerts(incident_id)
 
