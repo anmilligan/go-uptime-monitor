@@ -3,7 +3,7 @@ CREATE TABLE users (
 	telegram_id BIGINT NOT NULL UNIQUE,
 	username TEXT NOT NULL,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)
+);
 
 CREATE TABLE targets (
 	id BIGSERIAL PRIMARY KEY,
@@ -20,10 +20,10 @@ CREATE TABLE targets (
 	expected_status INT,
 	expected_body TEXT,
 
-	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
 	CHECK (kind IN ('http', 'tcp'))
-)
+);
 
 CREATE TABLE checks (
 	id BIGSERIAL PRIMARY KEY,
@@ -39,7 +39,7 @@ CREATE TABLE checks (
 	is_success BOOLEAN NOT NULL,
 
 	checked_at TIMESTAMPTZ NOT NULL
-)
+);
 
 CREATE TABLE incidents (
 	id BIGSERIAL PRIMARY KEY,
@@ -53,7 +53,7 @@ CREATE TABLE incidents (
 
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	closed_at TIMESTAMPTZ
-)
+);
 
 CREATE TABLE alerts (
 	id BIGSERIAL PRIMARY KEY,
@@ -66,19 +66,19 @@ CREATE TABLE alerts (
 	message TEXT NOT NULL,
 
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)
+);
 
 
 CREATE INDEX idx_targets_user_id
-ON targets(user_id)
+ON targets(user_id);
 
 CREATE INDEX idx_checks_target_checked_at
-ON checks(target_id, checked_at DESC)
+ON checks(target_id, checked_at DESC);
 
 CREATE INDEX idx_incidents_open
 ON incidents(target_id)
-WHERE status = 'OPEN'
+WHERE status = 'OPEN';
 
 CREATE INDEX idx_alerts_incident_id
-ON alerts(incident_id)
+ON alerts(incident_id);
 
