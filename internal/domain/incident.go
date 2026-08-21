@@ -22,13 +22,13 @@ func (i *Incident) Duration() time.Duration {
 
 func (i *Incident) Validate() error {
 	if i.TargetID <= 0 {
-		return errors.New("Инцидент должен быть привязан к существующему TargetID")
+		return errors.New("The incident must be linked to an existing TargetID")
 	}
 	if i.Status != "OPEN" && i.Status != "CLOSED" {
-		return errors.New("Некорректный статус инцидента, должно быть OPEN или CLOSED")
+		return errors.New("Incorrect incident status; it must be OPEN or CLOSED")
 	}
 	if i.Status == "CLOSED" && i.ClosedAt.Before(i.CreatedAt) {
-		return errors.New("Время закрытия инцидента не может быть раньше времени его открытия")
+		return errors.New("The time an incident is closed cannot be earlier than the time it was opened")
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package core
+package usecase
 
 import (
 	"Uptime_Monitor/internal/domain"

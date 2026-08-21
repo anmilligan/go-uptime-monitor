@@ -1,4 +1,4 @@
-package core
+package usecase
 
 import (
 	"Uptime_Monitor/internal/domain"
@@ -94,7 +94,7 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		ctx,
 		target.ID,
 		"DOWN",
-		"🔴 Сайт недоступен",
+		"🔴 Website unavailable",
 	)
 }
 
@@ -116,6 +116,6 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 		ctx,
 		target.ID,
 		"UP",
-		"🟢 Сайт снова доступен",
+		"🟢 Website is available again",
 	)
 }

@@ -17,10 +17,10 @@ func (u *User) Validate() error {
 	u.Username = strings.TrimSpace(u.Username)
 
 	if u.Username == "" {
-		return errors.New("Имя не может быть пустым")
+		return errors.New("The name cannot be empty")
 	}
 	if len(u.Username) < 3 {
-		return errors.New("Имя пользователя должно содержать минимум 3 символа")
+		return errors.New("The username must contain at least 3 characters")
 	}
 	return nil
 }

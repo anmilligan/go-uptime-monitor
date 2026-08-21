@@ -16,14 +16,14 @@ type Alert struct {
 
 func (a *Alert) Validate() error {
 	if a.TargetID <= 0 {
-		return errors.New("Алерт должен быть привязан к существующему TargetID")
+		return errors.New("The alert must be linked to an existing TargetID")
 	}
 	a.Type = strings.TrimSpace(a.Type)
 	if a.Type == "" {
-		return errors.New("Тип Алерт не может быть пустым")
+		return errors.New("The Alert type cannot be empty")
 	}
 	if strings.TrimSpace(a.Message) == "" {
-		return errors.New("Описание ошибки не может быть пустым")
+		return errors.New("The error description cannot be empty")
 	}
 	return nil
 }

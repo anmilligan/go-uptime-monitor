@@ -19,20 +19,20 @@ type Target struct {
 
 func (t *Target) Validate() error {
 	if t.Address == "" {
-		return errors.New("адрес не может быть пустым")
+		return errors.New("The address cannot be empty")
 	}
 	if t.Kind != "http" && t.Kind != "tcp" {
-		return errors.New("тип проверки должен быть http или tcp")
+		return errors.New("The connection type must be HTTP or TCP")
 	}
 	if t.Interval < 10*time.Second {
-		return errors.New("интервал проверки не может быть меньше 10 секунд")
+		return errors.New("The check interval cannot be less than 10 seconds")
 	}
 	if t.Timeout <= 0 {
-		return errors.New("таймаут должен быть больше нуля")
+		return errors.New("The timeout must be greater than zero")
 	}
 	if t.Kind == "http" {
 		if t.ExpectedStatus < 100 || t.ExpectedStatus > 600 {
-			return errors.New("некорректный ожидаемый HTTP-статус")
+			return errors.New("Invalid expected HTTP status")
 		}
 	}
 	return nil

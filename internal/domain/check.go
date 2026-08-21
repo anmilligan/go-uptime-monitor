@@ -17,13 +17,13 @@ type Check struct {
 
 func (c *Check) Validate() error {
 	if c.TargetID <= 0 {
-		return errors.New("Проверка должна осуществляться с существующим TargetID")
+		return errors.New("The verification must be performed using the existing TargetID")
 	}
 	if c.Status != 0 && (c.Status < 100 || c.Status > 599) {
-		return errors.New("Некорректный HTTP-статус ответа")
+		return errors.New("Invalid HTTP Response Status")
 	}
 	if c.ResponseTime < 0 {
-		return errors.New("Время ответа не может быть отрицательным")
+		return errors.New("Response time cannot be negative")
 	}
 	return nil
 }
