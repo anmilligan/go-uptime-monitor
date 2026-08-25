@@ -33,11 +33,13 @@ func main() {
 	targetRepo := postgres.NewTargetRepository(pool)
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
 	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
-	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase)
+	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
+	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase)
 
 	router := chi.NewRouter()
 	router.Post("/api/v1/monitors", targetHandler.Create)
 	router.Get("/api/v1/monitors/{id}", targetHandler.GetByID)
+	router.Get("/api/v1/monitors", targetHandler.List)
 
 	fmt.Println("server started on :8080")
 

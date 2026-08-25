@@ -19,19 +19,42 @@ type IAddTargetUseCase interface {
 type IGetTargetUseCase interface {
 	GetTarget(ctx context.Context, id int) (*domain.Target, error)
 }
-
+type IListTargetsUseCase interface {
+	ListTargets(ctx context.Context, userID int) ([]domain.Target, error)
+}
 type TargetHandler struct {
-	addTarget IAddTargetUseCase
-	getTarget IGetTargetUseCase
+	addTarget   IAddTargetUseCase
+	getTarget   IGetTargetUseCase
+	listTargets IListTargetsUseCase
 }
 
-func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase) *TargetHandler {
+func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase) *TargetHandler {
 	return &TargetHandler{
-		addTarget: addTarget,
-		getTarget: getTarget,
+		addTarget:   addTarget,
+		getTarget:   getTarget,
+		listTargets: listTargets,
 	}
 }
 
+func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
+	userIDParam := r.URL.Query().Get("user_id")
+
+	userID, err := strconv.Atoi(userIDParam)
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+	targets, err := h.listTargets.ListTargets(r.Context(), userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(targets); err != nil {
+		return
+	}
+}
 func (h *TargetHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
