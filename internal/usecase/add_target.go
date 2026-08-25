@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-type TargetRepository interface {
+type ITargetRepository interface {
 	Save(ctx context.Context, target *domain.Target) error
 }
 
 type AddTargetUseCase struct { // сценарий в котором лежит инструмент для работы с БД
-	targetRepo TargetRepository
+	targetRepo ITargetRepository
 }
 
-func NewAddTargetUseCase(repo TargetRepository) *AddTargetUseCase { // функция которая создает наш сценарий
+func NewAddTargetUseCase(repo ITargetRepository) *AddTargetUseCase { // функция которая создает наш сценарий
 	return &AddTargetUseCase{
 		targetRepo: repo,
 	}
@@ -30,15 +30,15 @@ type AddTargetRequest struct { // параметры описываемые по
 	ExpectedBody   string
 }
 
-func (uc *AddTargetUseCase) Execute(ctx context.Context, req AddTargetRequest) (*domain.Target, error) { // инструкция по добавлению сайта
+func (uc *AddTargetUseCase) AddTarget(ctx context.Context, req AddTargetRequest) (*domain.Target, error) { // инструкция по добавлению сайта
 	target := &domain.Target{
 		UserID:         req.UserID,
 		Kind:           req.Kind,
+		Address:        req.Address,
 		Interval:       req.Interval,
 		Timeout:        req.Timeout,
 		ExpectedStatus: req.ExpectedStatus,
 		ExpectedBody:   req.ExpectedBody,
-		CreatedAt:      time.Now(), // время создания ставим автоматически
 	}
 
 	if err := target.Validate(); err != nil { // запускаем проверку написанную в domain

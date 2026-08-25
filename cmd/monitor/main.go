@@ -1,10 +1,15 @@
 package main
 
 import (
+	"Uptime_Monitor/internal/repository/postgres"
+	"Uptime_Monitor/internal/transport/rest"
+	"Uptime_Monitor/internal/usecase"
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,4 +29,17 @@ func main() {
 	}
 
 	fmt.Println("database connected")
+
+	targetRepo := postgres.NewTargetRepository(pool)
+	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
+	targetHandler := rest.NewTargetHandler(addTargetUseCase)
+
+	router := chi.NewRouter()
+	router.Post("/api/v1/monitors", targetHandler.Create)
+
+	fmt.Println("server started on :8080")
+
+	if err := http.ListenAndServe(":8080", router); err != nil {
+		panic(err)
+	}
 }
