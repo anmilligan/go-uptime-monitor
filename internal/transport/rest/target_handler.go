@@ -6,19 +6,49 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type IAddTargetUseCase interface {
 	AddTarget(ctx context.Context, req usecase.AddTargetRequest) (*domain.Target, error)
 }
-type TargetHandler struct {
-	addTarget IAddTargetUseCase
+
+type IGetTargetUseCase interface {
+	GetTarget(ctx context.Context, id int) (*domain.Target, error)
 }
 
-func NewTargetHandler(addTarget IAddTargetUseCase) *TargetHandler {
+type TargetHandler struct {
+	addTarget IAddTargetUseCase
+	getTarget IGetTargetUseCase
+}
+
+func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase) *TargetHandler {
 	return &TargetHandler{
 		addTarget: addTarget,
+		getTarget: getTarget,
+	}
+}
+
+func (h *TargetHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		http.Error(w, "invalid target id", http.StatusBadRequest)
+		return
+	}
+
+	target, err := h.getTarget.GetTarget(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(target); err != nil {
+		return
 	}
 }
 
@@ -53,6 +83,7 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	target, err := h.addTarget.AddTarget(r.Context(), addTargetReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
