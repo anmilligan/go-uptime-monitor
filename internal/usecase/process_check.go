@@ -6,31 +6,36 @@ import (
 	"time"
 )
 
-type CheckAndIncidentRepo interface { // интерфейс со списком требований к БД
+type ICheckRepository interface {
 	SaveCheck(ctx context.Context, check *domain.Check) error
 	GetLastChecks(ctx context.Context, targetID int, limit int) ([]domain.Check, error)
+}
+
+type IIncidentRepository interface {
 	GetOpenIncident(ctx context.Context, targetID int) (*domain.Incident, error)
 	CreateIncident(ctx context.Context, incident *domain.Incident) error
 	CloseIncident(ctx context.Context, incidentID int, closedAt time.Time) error
 }
 
-type AlertCreator interface {
-	Execute(ctx context.Context, targetID int, alertType string, message string) error
+type IAlertCreator interface {
+	CreateAlert(ctx context.Context, targetID int, alertType string, message string) error
 }
 
 type ProcessCheckUseCase struct {
-	repo  CheckAndIncidentRepo
-	alert AlertCreator
+	checkRepo    ICheckRepository
+	incidentRepo IIncidentRepository
+	alert        IAlertCreator
 }
 
-func NewProcessCheckUseCase(repo CheckAndIncidentRepo, alert AlertCreator) *ProcessCheckUseCase {
+func NewProcessCheckUseCase(checkRepo ICheckRepository, incidentRepo IIncidentRepository, alert IAlertCreator) *ProcessCheckUseCase {
 	return &ProcessCheckUseCase{
-		repo:  repo,
-		alert: alert,
+		checkRepo:    checkRepo,
+		incidentRepo: incidentRepo,
+		alert:        alert,
 	}
 }
 
-func (uc *ProcessCheckUseCase) Execute(ctx context.Context, target *domain.Target, result CheckResult, consecutiveFailuresLimit int) error {
+func (uc *ProcessCheckUseCase) ProcessCheck(ctx context.Context, target *domain.Target, result domain.CheckResult, consecutiveFailuresLimit int) error {
 	// создаем и сохраняем технический лог проверки
 	check := &domain.Check{
 		TargetID:     target.ID,
@@ -40,7 +45,7 @@ func (uc *ProcessCheckUseCase) Execute(ctx context.Context, target *domain.Targe
 		CheckedAt:    result.CheckedAt,
 		IsSuccess:    result.IsSuccess,
 	}
-	if err := uc.repo.SaveCheck(ctx, check); err != nil {
+	if err := uc.checkRepo.SaveCheck(ctx, check); err != nil {
 		return err
 	}
 
@@ -52,7 +57,7 @@ func (uc *ProcessCheckUseCase) Execute(ctx context.Context, target *domain.Targe
 }
 
 func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain.Target, limit int) error {
-	existing, err := uc.repo.GetOpenIncident(ctx, target.ID)
+	existing, err := uc.incidentRepo.GetOpenIncident(ctx, target.ID)
 	// проверяем не открыт ли инцидент уже
 	if err != nil {
 		return err
@@ -60,7 +65,7 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 	if existing != nil {
 		return nil
 	}
-	history, err := uc.repo.GetLastChecks(ctx, target.ID, limit) // запрашиваем историю последних проверок, чтобы узнать количество подряд идущих ошибок
+	history, err := uc.checkRepo.GetLastChecks(ctx, target.ID, limit) // запрашиваем историю последних проверок, чтобы узнать количество подряд идущих ошибок
 	if err != nil {
 		return err
 	}
@@ -86,11 +91,11 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		CreatedAt: time.Now(),
 	}
 
-	if err := uc.repo.CreateIncident(ctx, incident); err != nil {
+	if err := uc.incidentRepo.CreateIncident(ctx, incident); err != nil {
 		return err
 	}
 
-	return uc.alert.Execute( // отправляем событие создания alert
+	return uc.alert.CreateAlert( // отправляем событие создания alert
 		ctx,
 		target.ID,
 		"DOWN",
@@ -99,7 +104,7 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 }
 
 func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domain.Target) error { // создаем метод восстановления
-	openIncident, err := uc.repo.GetOpenIncident(ctx, target.ID) // получаем открытый инцидент
+	openIncident, err := uc.incidentRepo.GetOpenIncident(ctx, target.ID) // получаем открытый инцидент
 	if err != nil {
 		return err
 	}
@@ -108,11 +113,11 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 	}
 	closedAt := time.Now()
 
-	if err := uc.repo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil { // закрываем инцидент
+	if err := uc.incidentRepo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil { // закрываем инцидент
 		return err
 	}
 
-	return uc.alert.Execute( // создали alert
+	return uc.alert.CreateAlert( // создали alert
 		ctx,
 		target.ID,
 		"UP",

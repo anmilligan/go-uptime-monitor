@@ -22,17 +22,23 @@ type IGetTargetUseCase interface {
 type IListTargetsUseCase interface {
 	ListTargets(ctx context.Context, userID int) ([]domain.Target, error)
 }
+
+type IDeleteTargetUseCase interface {
+	DeleteTarget(ctx context.Context, id int) error
+}
 type TargetHandler struct {
-	addTarget   IAddTargetUseCase
-	getTarget   IGetTargetUseCase
-	listTargets IListTargetsUseCase
+	addTarget    IAddTargetUseCase
+	getTarget    IGetTargetUseCase
+	listTargets  IListTargetsUseCase
+	deleteTarget IDeleteTargetUseCase
 }
 
-func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase) *TargetHandler {
+func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase, deleteTarget IDeleteTargetUseCase) *TargetHandler {
 	return &TargetHandler{
-		addTarget:   addTarget,
-		getTarget:   getTarget,
-		listTargets: listTargets,
+		addTarget:    addTarget,
+		getTarget:    getTarget,
+		listTargets:  listTargets,
+		deleteTarget: deleteTarget,
 	}
 }
 
@@ -113,4 +119,21 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(target); err != nil {
 		return
 	}
+}
+
+func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		http.Error(w, "invalid target id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.deleteTarget.DeleteTarget(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

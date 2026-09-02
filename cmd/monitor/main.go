@@ -34,12 +34,14 @@ func main() {
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
 	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
-	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase)
+	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
+	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase)
 
 	router := chi.NewRouter()
 	router.Post("/api/v1/monitors", targetHandler.Create)
 	router.Get("/api/v1/monitors/{id}", targetHandler.GetByID)
 	router.Get("/api/v1/monitors", targetHandler.List)
+	router.Delete("/api/v1/monitors/{id}", targetHandler.Delete)
 
 	fmt.Println("server started on :8080")
 

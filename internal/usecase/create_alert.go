@@ -6,21 +6,21 @@ import (
 	"time"
 )
 
-type AlertRepository interface {
+type IAlertRepository interface {
 	CreateAlert(ctx context.Context, alert *domain.Alert) error
 }
 
 type CreateAlertUseCase struct {
-	repo AlertRepository
+	repo IAlertRepository
 }
 
-func NewCreateAlertUseCase(repo AlertRepository) *CreateAlertUseCase {
+func NewCreateAlertUseCase(repo IAlertRepository) *CreateAlertUseCase {
 	return &CreateAlertUseCase{
 		repo: repo,
 	}
 }
 
-func (uc *CreateAlertUseCase) Execute(ctx context.Context, targetID int, alertType string, message string) error {
+func (uc *CreateAlertUseCase) CreateAlert(ctx context.Context, targetID int, alertType string, message string) error {
 	alert := domain.Alert{
 		TargetID:  targetID,
 		Type:      alertType,
