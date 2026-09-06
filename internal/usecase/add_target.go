@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type ITargetRepository interface {
+type IAddTargetRepository interface {
 	Save(ctx context.Context, target *domain.Target) error
 }
 

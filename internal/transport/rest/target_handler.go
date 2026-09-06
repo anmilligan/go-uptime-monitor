@@ -26,19 +26,26 @@ type IListTargetsUseCase interface {
 type IDeleteTargetUseCase interface {
 	DeleteTarget(ctx context.Context, id int) error
 }
+
+type IUpdateTargetUseCase interface {
+	UpdateTarget(ctx context.Context, target *domain.Target) error
+}
+
 type TargetHandler struct {
 	addTarget    IAddTargetUseCase
 	getTarget    IGetTargetUseCase
 	listTargets  IListTargetsUseCase
 	deleteTarget IDeleteTargetUseCase
+	updateTarget IUpdateTargetUseCase
 }
 
-func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase, deleteTarget IDeleteTargetUseCase) *TargetHandler {
+func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase, deleteTarget IDeleteTargetUseCase, updateTarget IUpdateTargetUseCase) *TargetHandler {
 	return &TargetHandler{
 		addTarget:    addTarget,
 		getTarget:    getTarget,
 		listTargets:  listTargets,
 		deleteTarget: deleteTarget,
+		updateTarget: updateTarget,
 	}
 }
 
@@ -136,4 +143,74 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type updateTargetRequest struct {
+	Kind            *string `json:"kind"`
+	Address         *string `json:"address"`
+	IntervalSeconds *int64  `json:"interval_seconds"`
+	TimeoutSeconds  *int64  `json:"timeout_seconds"`
+	ExpectedStatus  *int    `json:"expected_status"`
+	ExpectedBody    *string `json:"expected_body"`
+}
+
+func applyTargetUpdate(target *domain.Target, req updateTargetRequest) {
+	if req.Kind != nil {
+		target.Kind = *req.Kind
+	}
+
+	if req.Address != nil {
+		target.Address = *req.Address
+	}
+
+	if req.IntervalSeconds != nil {
+		target.Interval = time.Duration(*req.IntervalSeconds) * time.Second
+	}
+
+	if req.TimeoutSeconds != nil {
+		target.Timeout = time.Duration(*req.TimeoutSeconds) * time.Second
+	}
+
+	if req.ExpectedStatus != nil {
+		target.ExpectedStatus = *req.ExpectedStatus
+	}
+
+	if req.ExpectedBody != nil {
+		target.ExpectedBody = *req.ExpectedBody
+	}
+}
+func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		http.Error(w, "invalid target id", http.StatusBadRequest)
+		return
+	}
+
+	var req updateTargetRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	target, err := h.getTarget.GetTarget(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	applyTargetUpdate(target, req)
+
+	if err := h.updateTarget.UpdateTarget(r.Context(), target); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(target); err != nil {
+		return
+	}
 }
