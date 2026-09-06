@@ -20,12 +20,12 @@ func NewCreateAlertUseCase(repo IAlertRepository) *CreateAlertUseCase {
 	}
 }
 
-func (uc *CreateAlertUseCase) CreateAlert(ctx context.Context, targetID int, alertType string, message string) error {
+func (uc *CreateAlertUseCase) CreateAlert(ctx context.Context, incidentID int, alertType string, message string) error {
 	alert := domain.Alert{
-		TargetID:  targetID,
-		Type:      alertType,
-		Message:   message,
-		CreatedAt: time.Now(),
+		IncidentID: incidentID,
+		Type:       alertType,
+		Message:    message,
+		CreatedAt:  time.Now(),
 	}
 	if err := alert.Validate(); err != nil {
 		return err

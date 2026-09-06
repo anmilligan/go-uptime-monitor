@@ -7,15 +7,15 @@ import (
 )
 
 type Alert struct {
-	ID        int
-	TargetID  int       // ID проверяемого сайта, который упал
-	Type      string    // Тип ошибки (например: Timeout)
-	Message   string    // Читаемое описание
-	CreatedAt time.Time // Точное время ошибки
+	ID         int
+	IncidentID int       // ID проверяемого сайта, который упал
+	Type       string    // Тип ошибки (например: Timeout)
+	Message    string    // Читаемое описание
+	CreatedAt  time.Time // Точное время ошибки
 }
 
 func (a *Alert) Validate() error {
-	if a.TargetID <= 0 {
+	if a.IncidentID <= 0 {
 		return errors.New("The alert must be linked to an existing TargetID")
 	}
 	a.Type = strings.TrimSpace(a.Type)

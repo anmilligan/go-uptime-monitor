@@ -91,6 +91,10 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		CreatedAt: time.Now(),
 	}
 
+	if err := incident.Validate(); err != nil {
+		return err
+	}
+
 	if err := uc.incidentRepo.CreateIncident(ctx, incident); err != nil {
 		return err
 	}
