@@ -1,7 +1,9 @@
 package main
 
 import (
+	"Uptime_Monitor/internal/checker"
 	"Uptime_Monitor/internal/repository/postgres"
+	"Uptime_Monitor/internal/scheduler"
 	"Uptime_Monitor/internal/transport/rest"
 	"Uptime_Monitor/internal/usecase"
 	"context"
@@ -31,12 +33,27 @@ func main() {
 	fmt.Println("database connected")
 
 	targetRepo := postgres.NewTargetRepository(pool)
+	checkRepo := postgres.NewCheckRepository(pool)
+	incidentRepo := postgres.NewIncidentRepository(pool)
+	alertRepo := postgres.NewAlertRepository(pool)
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
 	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
 	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
 	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
 	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase, updateTargetUseCase)
+	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo)
+	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
+
+	httpChecker := checker.NewHTTPChecker()
+
+	monitorScheduler := scheduler.NewScheduler(
+		targetRepo,
+		httpChecker,
+		processCheckUseCase,
+		3,
+	)
+	go monitorScheduler.Run(ctx)
 
 	router := chi.NewRouter()
 	router.Post("/api/v1/monitors", targetHandler.Create)
