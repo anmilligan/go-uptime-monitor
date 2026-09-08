@@ -6,6 +6,7 @@ import (
 	"Uptime_Monitor/internal/scheduler"
 	"Uptime_Monitor/internal/transport/rest"
 	"Uptime_Monitor/internal/usecase"
+	"Uptime_Monitor/internal/worker"
 	"context"
 	"fmt"
 	"net/http"
@@ -47,11 +48,18 @@ func main() {
 
 	httpChecker := checker.NewHTTPChecker()
 
-	monitorScheduler := scheduler.NewScheduler(
-		targetRepo,
+	workerPool := worker.NewPool(
+		4,
 		httpChecker,
 		processCheckUseCase,
 		3,
+	)
+
+	workerPool.Start(ctx)
+
+	monitorScheduler := scheduler.NewScheduler(
+		targetRepo,
+		workerPool,
 	)
 	go monitorScheduler.Run(ctx)
 

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"Uptime_Monitor/internal/domain"
+	"Uptime_Monitor/internal/worker"
 	"context"
 	"log"
 	"time"
@@ -11,8 +12,8 @@ type ITargetRepository interface {
 	ListAll(ctx context.Context) ([]domain.Target, error)
 }
 
-type IChecker interface {
-	Check(ctx context.Context, target *domain.Target) domain.CheckResult
+type IJobQueue interface {
+	Enqueue(ctx context.Context, job worker.Job) error
 }
 
 type IProcessCheckUseCase interface {
@@ -25,20 +26,16 @@ type IProcessCheckUseCase interface {
 }
 
 type Scheduler struct {
-	targetRepo               ITargetRepository
-	checker                  IChecker
-	processCheck             IProcessCheckUseCase
-	consecutiveFailuresLimit int
-	nextRun                  map[int]time.Time
+	targetRepo ITargetRepository
+	jobQueue   IJobQueue
+	nextRun    map[int]time.Time
 }
 
-func NewScheduler(targetRepo ITargetRepository, checker IChecker, processCheck IProcessCheckUseCase, consecutiveFailuresLimit int) *Scheduler {
+func NewScheduler(targetRepo ITargetRepository, jobQueue IJobQueue) *Scheduler {
 	return &Scheduler{
-		targetRepo:               targetRepo,
-		checker:                  checker,
-		processCheck:             processCheck,
-		consecutiveFailuresLimit: consecutiveFailuresLimit,
-		nextRun:                  make(map[int]time.Time),
+		targetRepo: targetRepo,
+		jobQueue:   jobQueue,
+		nextRun:    make(map[int]time.Time),
 	}
 }
 
@@ -77,19 +74,17 @@ func (s *Scheduler) runCycle(ctx context.Context) {
 			continue
 		}
 
-		result := s.checker.Check(ctx, target)
+		job := worker.Job{
+			Target: *target,
+		}
 
-		if err := s.processCheck.ProcessCheck(
-			ctx,
-			target,
-			result,
-			s.consecutiveFailuresLimit,
-		); err != nil {
+		if err := s.jobQueue.Enqueue(ctx, job); err != nil {
 			log.Printf(
-				"scheduler: failed to process target %d: %v",
+				"scheduler: failed to enqueue target %d: %v",
 				target.ID,
 				err,
 			)
+			continue
 		}
 
 		s.nextRun[target.ID] = time.Now().Add(target.Interval)
