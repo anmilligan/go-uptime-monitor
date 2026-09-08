@@ -47,10 +47,15 @@ func main() {
 	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
 
 	httpChecker := checker.NewHTTPChecker()
+	tcpChecker := checker.NewTCPChecker()
 
+	targetChecker := checker.NewTargetChecker(
+		httpChecker,
+		tcpChecker,
+	)
 	workerPool := worker.NewPool(
 		4,
-		httpChecker,
+		targetChecker,
 		processCheckUseCase,
 		3,
 	)
