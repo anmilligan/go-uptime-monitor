@@ -2,6 +2,7 @@ package main
 
 import (
 	"Uptime_Monitor/internal/checker"
+	"Uptime_Monitor/internal/notifier"
 	"Uptime_Monitor/internal/repository/postgres"
 	"Uptime_Monitor/internal/scheduler"
 	"Uptime_Monitor/internal/transport/rest"
@@ -37,13 +38,22 @@ func main() {
 	checkRepo := postgres.NewCheckRepository(pool)
 	incidentRepo := postgres.NewIncidentRepository(pool)
 	alertRepo := postgres.NewAlertRepository(pool)
+	userRepo := postgres.NewUserRepository(pool)
+
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if telegramToken == "" {
+		panic("TELEGRAM_BOT_TOKEN is not set")
+	}
+	telegramNotifier := notifier.NewTelegramNotifier(telegramToken)
+
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
 	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
 	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
 	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
 	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase, updateTargetUseCase)
-	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo)
+	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier)
+
 	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
 
 	httpChecker := checker.NewHTTPChecker()

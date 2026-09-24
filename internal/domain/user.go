@@ -7,10 +7,10 @@ import (
 )
 
 type User struct {
-	ID         int       // id в нашей бд
-	TelegramID int       // цифровой id телеграмма
-	Username   string    // никнейм в системе
-	CreatedAt  time.Time // время регистрации
+	ID         int
+	TelegramID int64
+	Username   string
+	CreatedAt  time.Time
 }
 
 func (u *User) Validate() error {

@@ -18,7 +18,7 @@ type IIncidentRepository interface {
 }
 
 type IAlertCreator interface {
-	CreateAlert(ctx context.Context, incidentID int, alertType string, message string) error
+	CreateAlert(ctx context.Context, incidentID int, userID int, alertType string, message string) error
 }
 
 type ProcessCheckUseCase struct {
@@ -103,9 +103,10 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		return err
 	}
 
-	return uc.alert.CreateAlert( // отправляем событие создания alert
+	return uc.alert.CreateAlert(
 		ctx,
 		incident.ID,
+		target.UserID,
 		"DOWN",
 		"🔴 Website unavailable",
 	)
@@ -125,9 +126,10 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 		return err
 	}
 
-	return uc.alert.CreateAlert( // создали alert
+	return uc.alert.CreateAlert(
 		ctx,
 		openIncident.ID,
+		target.UserID,
 		"UP",
 		"🟢 Website is available again",
 	)
