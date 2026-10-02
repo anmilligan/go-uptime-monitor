@@ -12,8 +12,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
+
+	telegramtransport "Uptime_Monitor/internal/transport/telegram"
 
 	"github.com/go-chi/chi/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -44,15 +48,54 @@ func main() {
 	if telegramToken == "" {
 		panic("TELEGRAM_BOT_TOKEN is not set")
 	}
-	telegramNotifier := notifier.NewTelegramNotifier(telegramToken)
+	telegramAPI, err := tgbotapi.NewBotAPIWithClient(
+		telegramToken,
+		tgbotapi.APIEndpoint,
+		&http.Client{
+			Timeout: 35 * time.Second,
+		},
+	)
+	if err != nil {
+		panic("failed to initialize Telegram API")
+	}
+
+	telegramNotifier := notifier.NewTelegramNotifier(telegramAPI)
+
+	registerUserUseCase := usecase.NewRegisterTelegramUserUseCase(userRepo)
 
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
-	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
+
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
+
+	getLastCheckUseCase := usecase.NewGetLastCheckUseCase(checkRepo)
+
+	getOpenIncidentUseCase := usecase.NewGetOpenIncidentUseCase(incidentRepo)
+
+	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
+
+	telegramBot := telegramtransport.NewBot(
+		telegramAPI,
+		registerUserUseCase,
+		addTargetUseCase,
+		listTargetsUseCase,
+		getLastCheckUseCase,
+		getOpenIncidentUseCase,
+		calculateUptimeUseCase,
+		telegramNotifier,
+	)
+
+	go telegramBot.Run(ctx)
+
+	createAlertUseCase := usecase.NewCreateAlertUseCase(
+		alertRepo,
+		userRepo,
+		telegramNotifier,
+	)
+
+	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
 	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
 	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
 	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase, updateTargetUseCase)
-	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier)
 
 	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
 

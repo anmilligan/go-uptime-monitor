@@ -49,3 +49,30 @@ func (r *UserRepository) GetByID(
 
 	return &user, nil
 }
+
+func (r *UserRepository) Upsert(
+	ctx context.Context,
+	user *domain.User,
+) error {
+	query := `
+        INSERT INTO users (
+            telegram_id,
+            username
+        )
+        VALUES ($1, $2)
+        ON CONFLICT (telegram_id)
+        DO UPDATE SET
+            username = EXCLUDED.username
+        RETURNING id, created_at
+    `
+
+	return r.pool.QueryRow(
+		ctx,
+		query,
+		user.TelegramID,
+		user.Username,
+	).Scan(
+		&user.ID,
+		&user.CreatedAt,
+	)
+}

@@ -1,0 +1,71 @@
+### GET request to example server
+GET https://examples.http-client.intellij.net/get
+    ?generated-in=IntelliJ IDEA
+
+### Create monitor
+
+POST http://localhost:8080/api/v1/monitors
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "kind": "http",
+  "address": "https://example.com",
+  "interval_seconds": 30,
+  "timeout_seconds": 5,
+  "expected_status": 200,
+  "expected_body": ""
+}
+
+### Get monitor
+
+GET http://localhost:8080/api/v1/monitors/1
+
+### List monitors
+
+GET http://localhost:8080/api/v1/monitors?user_id=1
+
+### Delete monitor
+
+DELETE http://localhost:8080/api/v1/monitors/5
+
+### Update monitor
+
+PATCH http://localhost:8080/api/v1/monitors/1
+Content-Type: application/json
+
+{
+  "expected_status": 200
+}
+
+### Create TCP monitor
+
+POST http://localhost:8080/api/v1/monitors
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "kind": "tcp",
+  "address": "example.com:443",
+  "interval_seconds": 30,
+  "timeout_seconds": 5,
+  "expected_status": 200,
+  "expected_body": ""
+}
+
+### Break TCP monitor
+
+PATCH http://localhost:8080/api/v1/monitors/6
+Content-Type: application/json
+
+{
+"address": "127.0.0.1:1"
+}
+
+###
+PATCH http://localhost:8080/api/v1/monitors/6
+Content-Type: application/json
+
+{
+"address": "example.com:443"
+}
