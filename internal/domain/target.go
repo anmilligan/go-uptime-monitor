@@ -15,6 +15,7 @@ type Target struct {
 	ExpectedStatus int           // ожидаемый HTTP-статус
 	ExpectedBody   string        // ожидаемая строка в теле ответа
 	CreatedAt      time.Time     // когда этот монитор был создан
+	Active         bool          // участвует ли монитор в плановых проверках
 }
 
 func (t *Target) Validate() error {

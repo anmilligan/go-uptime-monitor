@@ -30,7 +30,7 @@ func (r *TargetRepository) Save(ctx context.Context, target *domain.Target) erro
         expected_body
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING id, created_at
+    RETURNING id, created_at, active
 `
 	err := r.pool.QueryRow(
 		ctx,
@@ -45,6 +45,7 @@ func (r *TargetRepository) Save(ctx context.Context, target *domain.Target) erro
 	).Scan(
 		&target.ID,
 		&target.CreatedAt,
+		&target.Active,
 	)
 	if err != nil {
 		return err
@@ -62,7 +63,8 @@ func (r *TargetRepository) GetByID(ctx context.Context, id int) (*domain.Target,
         timeout_seconds,
         expected_status,
         expected_body,
-        created_at
+        created_at,
+        active
     FROM targets
     WHERE id = $1
 `
@@ -84,7 +86,10 @@ func (r *TargetRepository) GetByID(ctx context.Context, id int) (*domain.Target,
 		&timeoutSeconds,
 		&target.ExpectedStatus,
 		&target.ExpectedBody,
-		&target.CreatedAt)
+		&target.CreatedAt,
+		&target.Active,
+	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +111,8 @@ func (r *TargetRepository) ListByUserID(ctx context.Context, userID int) ([]doma
 		timeout_seconds,
 		expected_status,
 		expected_body,
-		created_at
+		created_at,
+		active
 	FROM targets
 	WHERE user_id = $1
 	ORDER BY created_at DESC
@@ -134,6 +140,7 @@ func (r *TargetRepository) ListByUserID(ctx context.Context, userID int) ([]doma
 			&target.ExpectedStatus,
 			&target.ExpectedBody,
 			&target.CreatedAt,
+			&target.Active,
 		)
 		if err != nil {
 			return nil, err
@@ -207,8 +214,10 @@ func (r *TargetRepository) ListAll(
             timeout_seconds,
             expected_status,
             expected_body,
-            created_at
+            created_at,
+            active
         FROM targets
+        WHERE active = TRUE
         ORDER BY id
     `
 
@@ -235,6 +244,7 @@ func (r *TargetRepository) ListAll(
 			&target.ExpectedStatus,
 			&target.ExpectedBody,
 			&target.CreatedAt,
+			&target.Active,
 		)
 		if err != nil {
 			return nil, err
@@ -251,4 +261,42 @@ func (r *TargetRepository) ListAll(
 	}
 
 	return targets, nil
+}
+
+func (r *TargetRepository) Pause(
+	ctx context.Context,
+	id int,
+) error {
+	query := `
+		UPDATE targets
+		SET active = FALSE
+		WHERE id = $1
+	`
+
+	_, err := r.pool.Exec(
+		ctx,
+		query,
+		id,
+	)
+
+	return err
+}
+
+func (r *TargetRepository) Resume(
+	ctx context.Context,
+	id int,
+) error {
+	query := `
+		UPDATE targets
+		SET active = TRUE
+		WHERE id = $1
+	`
+
+	_, err := r.pool.Exec(
+		ctx,
+		query,
+		id,
+	)
+
+	return err
 }

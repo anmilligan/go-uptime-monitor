@@ -172,3 +172,66 @@ func (r *IncidentRepository) GetIncidentsForPeriod(
 
 	return incidents, nil
 }
+
+func (r *IncidentRepository) ListByTargetID(
+	ctx context.Context,
+	targetID int,
+	limit int,
+) ([]domain.Incident, error) {
+	query := `
+		SELECT
+			id,
+			target_id,
+			status,
+			created_at,
+			closed_at
+		FROM incidents
+		WHERE target_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.pool.Query(
+		ctx,
+		query,
+		targetID,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var incidents []domain.Incident
+
+	for rows.Next() {
+		var incident domain.Incident
+		var closedAt pgtype.Timestamptz
+
+		err := rows.Scan(
+			&incident.ID,
+			&incident.TargetID,
+			&incident.Status,
+			&incident.CreatedAt,
+			&closedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if closedAt.Valid {
+			incident.ClosedAt = closedAt.Time
+		}
+
+		incidents = append(
+			incidents,
+			incident,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return incidents, nil
+}

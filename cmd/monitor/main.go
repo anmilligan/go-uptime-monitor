@@ -60,18 +60,16 @@ func main() {
 	}
 
 	telegramNotifier := notifier.NewTelegramNotifier(telegramAPI)
-
 	registerUserUseCase := usecase.NewRegisterTelegramUserUseCase(userRepo)
-
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
-
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
-
 	getLastCheckUseCase := usecase.NewGetLastCheckUseCase(checkRepo)
-
 	getOpenIncidentUseCase := usecase.NewGetOpenIncidentUseCase(incidentRepo)
-
 	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
+	listIncidentsUseCase := usecase.NewListIncidentsUseCase(incidentRepo)
+	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
+	pauseTargetUseCase := usecase.NewPauseTargetUseCase(targetRepo)
+	resumeTargetUseCase := usecase.NewResumeTargetUseCase(targetRepo)
 
 	telegramBot := telegramtransport.NewBot(
 		telegramAPI,
@@ -81,6 +79,10 @@ func main() {
 		getLastCheckUseCase,
 		getOpenIncidentUseCase,
 		calculateUptimeUseCase,
+		listIncidentsUseCase,
+		deleteTargetUseCase,
+		pauseTargetUseCase,
+		resumeTargetUseCase,
 		telegramNotifier,
 	)
 
@@ -93,7 +95,6 @@ func main() {
 	)
 
 	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
-	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
 	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
 	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase, updateTargetUseCase)
 
