@@ -31,21 +31,62 @@ type IUpdateTargetUseCase interface {
 	UpdateTarget(ctx context.Context, target *domain.Target) error
 }
 
-type TargetHandler struct {
-	addTarget    IAddTargetUseCase
-	getTarget    IGetTargetUseCase
-	listTargets  IListTargetsUseCase
-	deleteTarget IDeleteTargetUseCase
-	updateTarget IUpdateTargetUseCase
+type IGetCheckHistoryUseCase interface {
+	GetCheckHistory(ctx context.Context, targetID int, limit int) ([]domain.Check, error)
 }
 
-func NewTargetHandler(addTarget IAddTargetUseCase, getTarget IGetTargetUseCase, listTargets IListTargetsUseCase, deleteTarget IDeleteTargetUseCase, updateTarget IUpdateTargetUseCase) *TargetHandler {
+type IListIncidentsUseCase interface {
+	ListIncidents(ctx context.Context, targetID int, limit int) ([]domain.Incident, error)
+}
+
+type IGetLastCheckUseCase interface {
+	GetLastCheck(ctx context.Context, targetID int) (*domain.Check, error)
+}
+
+type IGetOpenIncidentUseCase interface {
+	GetOpenIncident(ctx context.Context, targetID int) (*domain.Incident, error)
+}
+
+type ICalculateUptimeUseCase interface {
+	CalculateUptime(ctx context.Context, targetID int, targetCreatedAt time.Time, period time.Duration) (*usecase.UptimeResult, error)
+}
+
+type TargetHandler struct {
+	addTarget     IAddTargetUseCase
+	getTarget     IGetTargetUseCase
+	listTargets   IListTargetsUseCase
+	deleteTarget  IDeleteTargetUseCase
+	updateTarget  IUpdateTargetUseCase
+	lastCheck     IGetLastCheckUseCase
+	openIncident  IGetOpenIncidentUseCase
+	uptime        ICalculateUptimeUseCase
+	checkHistory  IGetCheckHistoryUseCase
+	listIncidents IListIncidentsUseCase
+}
+
+func NewTargetHandler(
+	addTarget IAddTargetUseCase,
+	getTarget IGetTargetUseCase,
+	listTargets IListTargetsUseCase,
+	deleteTarget IDeleteTargetUseCase,
+	updateTarget IUpdateTargetUseCase,
+	lastCheck IGetLastCheckUseCase,
+	openIncident IGetOpenIncidentUseCase,
+	uptime ICalculateUptimeUseCase,
+	checkHistory IGetCheckHistoryUseCase,
+	listIncidents IListIncidentsUseCase,
+) *TargetHandler {
 	return &TargetHandler{
-		addTarget:    addTarget,
-		getTarget:    getTarget,
-		listTargets:  listTargets,
-		deleteTarget: deleteTarget,
-		updateTarget: updateTarget,
+		addTarget:     addTarget,
+		getTarget:     getTarget,
+		listTargets:   listTargets,
+		deleteTarget:  deleteTarget,
+		lastCheck:     lastCheck,
+		openIncident:  openIncident,
+		uptime:        uptime,
+		updateTarget:  updateTarget,
+		checkHistory:  checkHistory,
+		listIncidents: listIncidents,
 	}
 }
 
@@ -68,22 +109,176 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func (h *TargetHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
 	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		http.Error(w, "invalid target id", http.StatusBadRequest)
+	if err != nil || id <= 0 {
+		http.Error(
+			w,
+			"invalid target id",
+			http.StatusBadRequest,
+		)
 		return
 	}
 
-	target, err := h.getTarget.GetTarget(r.Context(), id)
+	target, err := h.getTarget.GetTarget(
+		r.Context(),
+		id,
+	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(target); err != nil {
+
+	check, err := h.lastCheck.GetLastCheck(
+		r.Context(),
+		target.ID,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	incident, err := h.openIncident.GetOpenIncident(
+		r.Context(),
+		target.ID,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	uptime24h, err := h.uptime.CalculateUptime(
+		r.Context(),
+		target.ID,
+		target.CreatedAt,
+		24*time.Hour,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	uptime7d, err := h.uptime.CalculateUptime(
+		r.Context(),
+		target.ID,
+		target.CreatedAt,
+		7*24*time.Hour,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	status := "unknown"
+
+	switch {
+	case !target.Active:
+		status = "paused"
+
+	case incident != nil:
+		status = "down"
+
+	case check == nil:
+		status = "unknown"
+
+	case check.IsSuccess:
+		status = "up"
+
+	default:
+		status = "degraded"
+	}
+
+	var lastCheck *checkResponse
+
+	if check != nil {
+		lastCheck = &checkResponse{
+			ID:             check.ID,
+			TargetID:       check.TargetID,
+			Status:         check.Status,
+			ResponseTimeMS: check.ResponseTime.Milliseconds(),
+			IsSuccess:      check.IsSuccess,
+			CheckedAt:      check.CheckedAt,
+		}
+	}
+
+	var openIncident *incidentResponse
+
+	if incident != nil {
+		var closedAt *time.Time
+
+		if !incident.ClosedAt.IsZero() {
+			value := incident.ClosedAt
+			closedAt = &value
+		}
+
+		openIncident = &incidentResponse{
+			ID:        incident.ID,
+			TargetID:  incident.TargetID,
+			Status:    incident.Status,
+			CreatedAt: incident.CreatedAt,
+			ClosedAt:  closedAt,
+		}
+	}
+
+	response := targetDetailsResponse{
+		ID:              target.ID,
+		UserID:          target.UserID,
+		Kind:            target.Kind,
+		Address:         target.Address,
+		IntervalSeconds: int64(target.Interval / time.Second),
+		TimeoutSeconds:  int64(target.Timeout / time.Second),
+		ExpectedStatus:  target.ExpectedStatus,
+		ExpectedBody:    target.ExpectedBody,
+		Active:          target.Active,
+		CreatedAt:       target.CreatedAt,
+
+		Status:       status,
+		LastCheck:    lastCheck,
+		OpenIncident: openIncident,
+
+		Uptime: uptimeResponse{
+			Last24Hours: uptimePeriodResponse{
+				HasData:            uptime24h.HasData,
+				Percentage:         uptime24h.Percentage,
+				ObservedForSeconds: int64(uptime24h.ObservedFor / time.Second),
+			},
+			Last7Days: uptimePeriodResponse{
+				HasData:            uptime7d.HasData,
+				Percentage:         uptime7d.Percentage,
+				ObservedForSeconds: int64(uptime7d.ObservedFor / time.Second),
+			},
+		},
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		return
 	}
 }
@@ -211,6 +406,208 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(target); err != nil {
+		return
+	}
+}
+
+type checkResponse struct {
+	ID             int       `json:"id"`
+	TargetID       int       `json:"target_id"`
+	Status         int       `json:"status"`
+	ResponseTimeMS int64     `json:"response_time_ms"`
+	IsSuccess      bool      `json:"is_success"`
+	CheckedAt      time.Time `json:"checked_at"`
+}
+
+type incidentResponse struct {
+	ID        int        `json:"id"`
+	TargetID  int        `json:"target_id"`
+	Status    string     `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	ClosedAt  *time.Time `json:"closed_at"`
+}
+
+type uptimePeriodResponse struct {
+	HasData            bool    `json:"has_data"`
+	Percentage         float64 `json:"percentage"`
+	ObservedForSeconds int64   `json:"observed_for_seconds"`
+}
+
+type uptimeResponse struct {
+	Last24Hours uptimePeriodResponse `json:"last_24_hours"`
+	Last7Days   uptimePeriodResponse `json:"last_7_days"`
+}
+
+type targetDetailsResponse struct {
+	ID              int       `json:"id"`
+	UserID          int       `json:"user_id"`
+	Kind            string    `json:"kind"`
+	Address         string    `json:"address"`
+	IntervalSeconds int64     `json:"interval_seconds"`
+	TimeoutSeconds  int64     `json:"timeout_seconds"`
+	ExpectedStatus  int       `json:"expected_status"`
+	ExpectedBody    string    `json:"expected_body"`
+	Active          bool      `json:"active"`
+	CreatedAt       time.Time `json:"created_at"`
+
+	Status       string            `json:"status"`
+	LastCheck    *checkResponse    `json:"last_check"`
+	Uptime       uptimeResponse    `json:"uptime"`
+	OpenIncident *incidentResponse `json:"open_incident"`
+}
+
+func (h *TargetHandler) GetChecks(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idParam := chi.URLParam(r, "id")
+
+	targetID, err := strconv.Atoi(idParam)
+	if err != nil || targetID <= 0 {
+		http.Error(
+			w,
+			"invalid target id",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	limit := 50
+
+	limitParam := r.URL.Query().Get("limit")
+	if limitParam != "" {
+		limit, err = strconv.Atoi(limitParam)
+		if err != nil || limit <= 0 || limit > 200 {
+			http.Error(
+				w,
+				"limit must be between 1 and 200",
+				http.StatusBadRequest,
+			)
+			return
+		}
+	}
+
+	checks, err := h.checkHistory.GetCheckHistory(
+		r.Context(),
+		targetID,
+		limit,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	response := make(
+		[]checkResponse,
+		0,
+		len(checks),
+	)
+
+	for _, check := range checks {
+		response = append(
+			response,
+			checkResponse{
+				ID:             check.ID,
+				TargetID:       check.TargetID,
+				Status:         check.Status,
+				ResponseTimeMS: check.ResponseTime.Milliseconds(),
+				IsSuccess:      check.IsSuccess,
+				CheckedAt:      check.CheckedAt,
+			},
+		)
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
+}
+
+func (h *TargetHandler) GetIncidents(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idParam := chi.URLParam(r, "id")
+
+	targetID, err := strconv.Atoi(idParam)
+	if err != nil || targetID <= 0 {
+		http.Error(
+			w,
+			"invalid target id",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	limit := 20
+
+	limitParam := r.URL.Query().Get("limit")
+	if limitParam != "" {
+		limit, err = strconv.Atoi(limitParam)
+		if err != nil || limit <= 0 || limit > 100 {
+			http.Error(
+				w,
+				"limit must be between 1 and 100",
+				http.StatusBadRequest,
+			)
+			return
+		}
+	}
+
+	incidents, err := h.listIncidents.ListIncidents(
+		r.Context(),
+		targetID,
+		limit,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	response := make(
+		[]incidentResponse,
+		0,
+		len(incidents),
+	)
+
+	for _, incident := range incidents {
+		var closedAt *time.Time
+
+		if !incident.ClosedAt.IsZero() {
+			value := incident.ClosedAt
+			closedAt = &value
+		}
+
+		response = append(
+			response,
+			incidentResponse{
+				ID:        incident.ID,
+				TargetID:  incident.TargetID,
+				Status:    incident.Status,
+				CreatedAt: incident.CreatedAt,
+				ClosedAt:  closedAt,
+			},
+		)
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		return
 	}
 }

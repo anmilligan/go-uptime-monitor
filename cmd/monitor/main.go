@@ -60,17 +60,24 @@ func main() {
 	}
 
 	telegramNotifier := notifier.NewTelegramNotifier(telegramAPI)
+
 	registerUserUseCase := usecase.NewRegisterTelegramUserUseCase(userRepo)
 	addTargetUseCase := usecase.NewAddTargetUseCase(targetRepo)
+	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
 	listTargetsUseCase := usecase.NewListTargetsUseCase(targetRepo)
-	getLastCheckUseCase := usecase.NewGetLastCheckUseCase(checkRepo)
-	getOpenIncidentUseCase := usecase.NewGetOpenIncidentUseCase(incidentRepo)
-	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
-	listIncidentsUseCase := usecase.NewListIncidentsUseCase(incidentRepo)
+	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
 	deleteTargetUseCase := usecase.NewDeleteTargetUseCase(targetRepo)
 	pauseTargetUseCase := usecase.NewPauseTargetUseCase(targetRepo)
 	resumeTargetUseCase := usecase.NewResumeTargetUseCase(targetRepo)
+	getLastCheckUseCase := usecase.NewGetLastCheckUseCase(checkRepo)
+	getCheckHistoryUseCase := usecase.NewGetCheckHistoryUseCase(checkRepo)
+	getOpenIncidentUseCase := usecase.NewGetOpenIncidentUseCase(incidentRepo)
+	listIncidentsUseCase := usecase.NewListIncidentsUseCase(incidentRepo)
+	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
+	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier)
+	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
 
+	// Telegram transport.
 	telegramBot := telegramtransport.NewBot(
 		telegramAPI,
 		registerUserUseCase,
@@ -88,25 +95,27 @@ func main() {
 
 	go telegramBot.Run(ctx)
 
-	createAlertUseCase := usecase.NewCreateAlertUseCase(
-		alertRepo,
-		userRepo,
-		telegramNotifier,
+	// REST transport.
+	targetHandler := rest.NewTargetHandler(
+		addTargetUseCase,
+		getTargetUseCase,
+		listTargetsUseCase,
+		deleteTargetUseCase,
+		updateTargetUseCase,
+		getLastCheckUseCase,
+		getOpenIncidentUseCase,
+		calculateUptimeUseCase,
+		getCheckHistoryUseCase,
+		listIncidentsUseCase,
 	)
 
-	getTargetUseCase := usecase.NewGetTargetUseCase(targetRepo)
-	updateTargetUseCase := usecase.NewUpdateTargetUseCase(targetRepo)
-	targetHandler := rest.NewTargetHandler(addTargetUseCase, getTargetUseCase, listTargetsUseCase, deleteTargetUseCase, updateTargetUseCase)
-
-	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
+	healthHandler := rest.NewHealthHandler(pool)
 
 	httpChecker := checker.NewHTTPChecker()
 	tcpChecker := checker.NewTCPChecker()
 
-	targetChecker := checker.NewTargetChecker(
-		httpChecker,
-		tcpChecker,
-	)
+	targetChecker := checker.NewTargetChecker(httpChecker, tcpChecker)
+
 	workerPool := worker.NewPool(
 		4,
 		targetChecker,
@@ -116,18 +125,20 @@ func main() {
 
 	workerPool.Start(ctx)
 
-	monitorScheduler := scheduler.NewScheduler(
-		targetRepo,
-		workerPool,
-	)
+	monitorScheduler := scheduler.NewScheduler(targetRepo, workerPool)
+
 	go monitorScheduler.Run(ctx)
 
 	router := chi.NewRouter()
+	router.Get("/healthz", healthHandler.Health)
+	router.Get("/readyz", healthHandler.Ready)
 	router.Post("/api/v1/monitors", targetHandler.Create)
 	router.Get("/api/v1/monitors/{id}", targetHandler.GetByID)
 	router.Get("/api/v1/monitors", targetHandler.List)
 	router.Delete("/api/v1/monitors/{id}", targetHandler.Delete)
 	router.Patch("/api/v1/monitors/{id}", targetHandler.Update)
+	router.Get("/api/v1/monitors/{id}/checks", targetHandler.GetChecks)
+	router.Get("/api/v1/monitors/{id}/incidents", targetHandler.GetIncidents)
 
 	fmt.Println("server started on :8080")
 
