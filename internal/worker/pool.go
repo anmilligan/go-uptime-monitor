@@ -2,8 +2,9 @@ package worker
 
 import (
 	"Uptime_Monitor/internal/domain"
+	"Uptime_Monitor/internal/metrics"
 	"context"
-	"log"
+	"log/slog"
 )
 
 type IChecker interface {
@@ -41,10 +42,7 @@ func (p *Pool) Start(ctx context.Context) {
 	}
 }
 
-func (p *Pool) runWorker(
-	ctx context.Context,
-	workerID int,
-) {
+func (p *Pool) runWorker(ctx context.Context, workerID int) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -55,17 +53,22 @@ func (p *Pool) runWorker(
 
 			result := p.checker.Check(ctx, &target)
 
+			metrics.RecordCheck()
+
+			metrics.RecordCheckLatency(target.ID, result.ResponseTime)
+
 			if err := p.processCheck.ProcessCheck(
 				ctx,
 				&target,
 				result,
 				p.consecutiveFailuresLimit,
 			); err != nil {
-				log.Printf(
-					"worker %d: failed to process target %d: %v",
-					workerID,
-					target.ID,
-					err,
+				slog.ErrorContext(
+					ctx,
+					"worker failed to process monitor",
+					"worker_id", workerID,
+					"monitor_id", target.ID,
+					"error", err,
 				)
 			}
 		}

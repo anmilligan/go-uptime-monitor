@@ -5,7 +5,7 @@ import (
 	"Uptime_Monitor/internal/usecase"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -109,15 +109,15 @@ func (b *Bot) Run(ctx context.Context) {
 	updates := b.api.GetUpdatesChan(updateConfig)
 	defer b.api.StopReceivingUpdates()
 
-	log.Printf(
-		"telegram bot started: @%s",
-		b.api.Self.UserName,
+	slog.Info(
+		"telegram bot started",
+		"username", b.api.Self.UserName,
 	)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("telegram bot stopped")
+			slog.Info("telegram bot stopped")
 			return
 
 		case update, ok := <-updates:
@@ -126,9 +126,11 @@ func (b *Bot) Run(ctx context.Context) {
 			}
 
 			if err := b.handleUpdate(ctx, update); err != nil {
-				log.Printf(
-					"telegram: failed to handle update %d",
-					update.UpdateID,
+				slog.ErrorContext(
+					ctx,
+					"telegram failed to handle update",
+					"update_id", update.UpdateID,
+					"error", err,
 				)
 			}
 		}
@@ -166,9 +168,10 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
 			return err
 		}
 
-		log.Printf(
-			"telegram: registered user %d",
-			user.ID,
+		slog.InfoContext(
+			ctx,
+			"telegram user registered",
+			"user_id", user.ID,
 		)
 
 		return b.sendMainMenu(
@@ -288,7 +291,11 @@ func (b *Bot) handleAdd(
 	)
 
 	if err != nil {
-		log.Printf("telegram: failed to add monitor: %v", err)
+		slog.ErrorContext(
+			ctx,
+			"telegram failed to add monitor",
+			"error", err,
+		)
 
 		return b.notifier.Send(
 			ctx,

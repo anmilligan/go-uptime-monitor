@@ -3,6 +3,7 @@ package usecase
 import (
 	"Uptime_Monitor/internal/domain"
 	"context"
+	"log/slog"
 	"time"
 )
 
@@ -36,6 +37,22 @@ func NewProcessCheckUseCase(checkRepo ICheckRepository, incidentRepo IIncidentRe
 }
 
 func (uc *ProcessCheckUseCase) ProcessCheck(ctx context.Context, target *domain.Target, result domain.CheckResult, consecutiveFailuresLimit int) error {
+
+	resultText := "success"
+
+	if !result.IsSuccess {
+		resultText = "failure"
+	}
+
+	slog.InfoContext(
+		ctx,
+		"monitor check completed",
+		"monitor_id", target.ID,
+		"result", resultText,
+		"code", result.Status,
+		"latency_ms", result.ResponseTime.Milliseconds(),
+	)
+
 	// создаем и сохраняем технический лог проверки
 	check := &domain.Check{
 		TargetID:     target.ID,
@@ -103,6 +120,15 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		return err
 	}
 
+	slog.WarnContext(
+		ctx,
+		"monitor state changed",
+		"monitor_id", target.ID,
+		"from", "DEGRADED",
+		"to", "DOWN",
+		"incident_id", incident.ID,
+	)
+
 	return uc.alert.CreateAlert(
 		ctx,
 		incident.ID,
@@ -125,6 +151,15 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 	if err := uc.incidentRepo.CloseIncident(ctx, openIncident.ID, closedAt); err != nil { // закрываем инцидент
 		return err
 	}
+
+	slog.InfoContext(
+		ctx,
+		"monitor state changed",
+		"monitor_id", target.ID,
+		"from", "DOWN",
+		"to", "UP",
+		"incident_id", openIncident.ID,
+	)
 
 	return uc.alert.CreateAlert(
 		ctx,

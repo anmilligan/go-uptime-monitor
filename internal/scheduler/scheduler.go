@@ -2,9 +2,10 @@ package scheduler
 
 import (
 	"Uptime_Monitor/internal/domain"
+	"Uptime_Monitor/internal/metrics"
 	"Uptime_Monitor/internal/worker"
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -59,7 +60,11 @@ func (s *Scheduler) Run(ctx context.Context) {
 func (s *Scheduler) runCycle(ctx context.Context) {
 	targets, err := s.targetRepo.ListAll(ctx)
 	if err != nil {
-		log.Printf("scheduler: failed to get targets: %v", err)
+		slog.ErrorContext(
+			ctx,
+			"scheduler failed to get targets",
+			"error", err,
+		)
 		return
 	}
 
@@ -79,12 +84,20 @@ func (s *Scheduler) runCycle(ctx context.Context) {
 		}
 
 		if err := s.jobQueue.Enqueue(ctx, job); err != nil {
-			log.Printf(
-				"scheduler: failed to enqueue target %d: %v",
-				target.ID,
-				err,
+			slog.ErrorContext(
+				ctx,
+				"scheduler failed to enqueue target",
+				"monitor_id", target.ID,
+				"error", err,
 			)
 			continue
+		}
+
+		if exists {
+			actualRun := time.Now()
+			lag := actualRun.Sub(nextRun)
+
+			metrics.RecordSchedulerLag(lag)
 		}
 
 		s.nextRun[target.ID] = time.Now().Add(target.Interval)

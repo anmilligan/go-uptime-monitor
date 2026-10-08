@@ -2,6 +2,7 @@ package main
 
 import (
 	"Uptime_Monitor/internal/checker"
+	"Uptime_Monitor/internal/metrics"
 	"Uptime_Monitor/internal/notifier"
 	"Uptime_Monitor/internal/repository/postgres"
 	"Uptime_Monitor/internal/scheduler"
@@ -9,7 +10,7 @@ import (
 	"Uptime_Monitor/internal/usecase"
 	"Uptime_Monitor/internal/worker"
 	"context"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -22,31 +23,51 @@ import (
 )
 
 func main() {
+
+	logger := slog.New(
+		slog.NewJSONHandler(
+			os.Stdout,
+			nil,
+		),
+	)
+
+	slog.SetDefault(logger)
+
 	ctx := context.Background()
 
 	databaseURL := os.Getenv("DATABASE_URL")
 
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
-		panic(err)
+		slog.Error(
+			"failed to create database pool",
+			"error", err,
+		)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(ctx); err != nil {
-		panic(err)
+		slog.Error(
+			"failed to connect to database",
+			"error", err,
+		)
+		os.Exit(1)
 	}
 
-	fmt.Println("database connected")
+	slog.Info("database connected")
 
 	targetRepo := postgres.NewTargetRepository(pool)
 	checkRepo := postgres.NewCheckRepository(pool)
 	incidentRepo := postgres.NewIncidentRepository(pool)
 	alertRepo := postgres.NewAlertRepository(pool)
 	userRepo := postgres.NewUserRepository(pool)
+	metricsRepo := postgres.NewMetricsRepository(pool)
 
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if telegramToken == "" {
-		panic("TELEGRAM_BOT_TOKEN is not set")
+		slog.Error("TELEGRAM_BOT_TOKEN is not set")
+		os.Exit(1)
 	}
 	telegramAPI, err := tgbotapi.NewBotAPIWithClient(
 		telegramToken,
@@ -56,7 +77,11 @@ func main() {
 		},
 	)
 	if err != nil {
-		panic("failed to initialize Telegram API")
+		slog.Error(
+			"failed to initialize Telegram API",
+			"error", err,
+		)
+		os.Exit(1)
 	}
 
 	telegramNotifier := notifier.NewTelegramNotifier(telegramAPI)
@@ -132,6 +157,8 @@ func main() {
 	router := chi.NewRouter()
 	router.Get("/healthz", healthHandler.Health)
 	router.Get("/readyz", healthHandler.Ready)
+	router.Handle("/metrics", metrics.Handler(metricsRepo, calculateUptimeUseCase))
+
 	router.Post("/api/v1/monitors", targetHandler.Create)
 	router.Get("/api/v1/monitors/{id}", targetHandler.GetByID)
 	router.Get("/api/v1/monitors", targetHandler.List)
@@ -140,9 +167,16 @@ func main() {
 	router.Get("/api/v1/monitors/{id}/checks", targetHandler.GetChecks)
 	router.Get("/api/v1/monitors/{id}/incidents", targetHandler.GetIncidents)
 
-	fmt.Println("server started on :8080")
+	slog.Info(
+		"HTTP server started",
+		"address", ":8080",
+	)
 
 	if err := http.ListenAndServe(":8080", router); err != nil {
-		panic(err)
+		slog.Error(
+			"HTTP server stopped",
+			"error", err,
+		)
+		os.Exit(1)
 	}
 }
