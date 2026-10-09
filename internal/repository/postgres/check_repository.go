@@ -104,3 +104,21 @@ func (r *CheckRepository) GetLastChecks(
 
 	return checks, nil
 }
+
+func (r *CheckRepository) DeleteChecksBefore(ctx context.Context, before time.Time) (int64, error) {
+	const query = `
+		DELETE FROM checks
+		WHERE checked_at < $1
+	`
+
+	result, err := r.pool.Exec(
+		ctx,
+		query,
+		before,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected(), nil
+}

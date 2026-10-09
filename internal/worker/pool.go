@@ -5,6 +5,7 @@ import (
 	"Uptime_Monitor/internal/metrics"
 	"context"
 	"log/slog"
+	"sync"
 )
 
 type IChecker interface {
@@ -20,6 +21,8 @@ type Pool struct {
 	processCheck             IProcessCheckUseCase
 	workerCount              int
 	consecutiveFailuresLimit int
+
+	wg sync.WaitGroup
 }
 
 func NewPool(
@@ -38,7 +41,13 @@ func NewPool(
 }
 func (p *Pool) Start(ctx context.Context) {
 	for i := 0; i < p.workerCount; i++ {
-		go p.runWorker(ctx, i+1)
+		p.wg.Add(1)
+
+		go func(workerID int) {
+			defer p.wg.Done()
+
+			p.runWorker(ctx, workerID)
+		}(i + 1)
 	}
 }
 
@@ -49,22 +58,34 @@ func (p *Pool) runWorker(ctx context.Context, workerID int) {
 			return
 
 		case job := <-p.jobs:
+			if ctx.Err() != nil {
+				return
+			}
+
 			target := job.Target
 
-			result := p.checker.Check(ctx, &target)
+			jobCtx := context.WithoutCancel(ctx)
+
+			result := p.checker.Check(
+				jobCtx,
+				&target,
+			)
 
 			metrics.RecordCheck()
 
-			metrics.RecordCheckLatency(target.ID, result.ResponseTime)
+			metrics.RecordCheckLatency(
+				target.ID,
+				result.ResponseTime,
+			)
 
 			if err := p.processCheck.ProcessCheck(
-				ctx,
+				jobCtx,
 				&target,
 				result,
 				p.consecutiveFailuresLimit,
 			); err != nil {
 				slog.ErrorContext(
-					ctx,
+					jobCtx,
 					"worker failed to process monitor",
 					"worker_id", workerID,
 					"monitor_id", target.ID,
@@ -82,5 +103,22 @@ func (p *Pool) Enqueue(ctx context.Context, job Job) error {
 
 	case p.jobs <- job:
 		return nil
+	}
+}
+
+func (p *Pool) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }

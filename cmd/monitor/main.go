@@ -10,9 +10,12 @@ import (
 	"Uptime_Monitor/internal/usecase"
 	"Uptime_Monitor/internal/worker"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	telegramtransport "Uptime_Monitor/internal/transport/telegram"
@@ -33,7 +36,12 @@ func main() {
 
 	slog.SetDefault(logger)
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
 	databaseURL := os.Getenv("DATABASE_URL")
 
@@ -101,6 +109,7 @@ func main() {
 	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
 	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier)
 	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
+	cleanupCheckHistoryUseCase := usecase.NewCleanupCheckHistoryUseCase(checkRepo, 30*24*time.Hour)
 
 	// Telegram transport.
 	telegramBot := telegramtransport.NewBot(
@@ -154,6 +163,10 @@ func main() {
 
 	go monitorScheduler.Run(ctx)
 
+	cleanupScheduler := scheduler.NewCleanupScheduler(cleanupCheckHistoryUseCase, 24*time.Hour)
+
+	go cleanupScheduler.Run(ctx)
+
 	router := chi.NewRouter()
 	router.Get("/healthz", healthHandler.Health)
 	router.Get("/readyz", healthHandler.Ready)
@@ -167,16 +180,62 @@ func main() {
 	router.Get("/api/v1/monitors/{id}/checks", targetHandler.GetChecks)
 	router.Get("/api/v1/monitors/{id}/incidents", targetHandler.GetIncidents)
 
-	slog.Info(
-		"HTTP server started",
-		"address", ":8080",
-	)
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
 
-	if err := http.ListenAndServe(":8080", router); err != nil {
+	go func() {
+		slog.Info(
+			"HTTP server started",
+			"address", server.Addr,
+		)
+
+		if err := server.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+
+			slog.Error(
+				"HTTP server failed",
+				"error", err,
+			)
+
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	slog.Info("shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error(
-			"HTTP server stopped",
+			"HTTP server shutdown failed",
 			"error", err,
 		)
-		os.Exit(1)
+	} else {
+		slog.Info("HTTP server stopped")
+	}
+
+	slog.Info("waiting for workers to finish")
+
+	workerShutdownCtx, workerCancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer workerCancel()
+
+	if err := workerPool.Wait(workerShutdownCtx); err != nil {
+		slog.Warn(
+			"workers did not stop before shutdown timeout",
+			"error", err,
+		)
+	} else {
+		slog.Info("workers stopped")
 	}
 }
