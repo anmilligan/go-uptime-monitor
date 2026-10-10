@@ -10,33 +10,31 @@ import (
 )
 
 type ITargetRepository interface {
-	ListAll(ctx context.Context) ([]domain.Target, error)
+	ClaimDueTargets(
+		ctx context.Context,
+		limit int,
+	) ([]domain.ScheduledTarget, error)
 }
 
 type IJobQueue interface {
 	Enqueue(ctx context.Context, job worker.Job) error
 }
 
-type IProcessCheckUseCase interface {
-	ProcessCheck(
-		ctx context.Context,
-		target *domain.Target,
-		result domain.CheckResult,
-		consecutiveFailuresLimit int,
-	) error
-}
-
 type Scheduler struct {
 	targetRepo ITargetRepository
 	jobQueue   IJobQueue
-	nextRun    map[int]time.Time
+	batchSize  int
 }
 
-func NewScheduler(targetRepo ITargetRepository, jobQueue IJobQueue) *Scheduler {
+func NewScheduler(
+	targetRepo ITargetRepository,
+	jobQueue IJobQueue,
+	batchSize int,
+) *Scheduler {
 	return &Scheduler{
 		targetRepo: targetRepo,
 		jobQueue:   jobQueue,
-		nextRun:    make(map[int]time.Time),
+		batchSize:  batchSize,
 	}
 }
 
@@ -58,48 +56,51 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) runCycle(ctx context.Context) {
-	targets, err := s.targetRepo.ListAll(ctx)
+	targets, err := s.targetRepo.ClaimDueTargets(
+		ctx,
+		s.batchSize,
+	)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+
 		slog.ErrorContext(
 			ctx,
-			"scheduler failed to get targets",
+			"scheduler failed to claim due targets",
 			"error", err,
 		)
 		return
 	}
 
-	now := time.Now()
-
 	for i := range targets {
-		target := &targets[i]
-
-		nextRun, exists := s.nextRun[target.ID]
-
-		if exists && now.Before(nextRun) {
-			continue
+		if ctx.Err() != nil {
+			return
 		}
 
+		scheduled := targets[i]
+
 		job := worker.Job{
-			Target: *target,
+			Target: scheduled.Target,
 		}
 
 		if err := s.jobQueue.Enqueue(ctx, job); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+
 			slog.ErrorContext(
 				ctx,
 				"scheduler failed to enqueue target",
-				"monitor_id", target.ID,
+				"monitor_id", scheduled.Target.ID,
 				"error", err,
 			)
+
 			continue
 		}
 
-		if exists {
-			actualRun := time.Now()
-			lag := actualRun.Sub(nextRun)
+		lag := time.Since(scheduled.ScheduledAt)
 
-			metrics.RecordSchedulerLag(lag)
-		}
-
-		s.nextRun[target.ID] = time.Now().Add(target.Interval)
+		metrics.RecordSchedulerLag(lag)
 	}
 }

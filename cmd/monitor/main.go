@@ -159,7 +159,7 @@ func main() {
 
 	workerPool.Start(ctx)
 
-	monitorScheduler := scheduler.NewScheduler(targetRepo, workerPool)
+	monitorScheduler := scheduler.NewScheduler(targetRepo, workerPool, 4)
 
 	go monitorScheduler.Run(ctx)
 
