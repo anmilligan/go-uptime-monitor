@@ -4,6 +4,7 @@ import (
 	"Uptime_Monitor/internal/checker"
 	"Uptime_Monitor/internal/metrics"
 	"Uptime_Monitor/internal/notifier"
+	redisinfra "Uptime_Monitor/internal/redis"
 	"Uptime_Monitor/internal/repository/postgres"
 	"Uptime_Monitor/internal/scheduler"
 	"Uptime_Monitor/internal/transport/rest"
@@ -23,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -64,6 +66,35 @@ func main() {
 	}
 
 	slog.Info("database connected")
+
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+
+	redisClient := goredis.NewClient(
+		&goredis.Options{
+			Addr: redisAddr,
+		},
+	)
+
+	defer redisClient.Close()
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		slog.Error(
+			"failed to connect to redis",
+			"error", err,
+			"address", redisAddr,
+		)
+		os.Exit(1)
+	}
+
+	slog.Info(
+		"redis connected",
+		"address", redisAddr,
+	)
+
+	alertDeduplicator := redisinfra.NewAlertDeduplicator(redisClient)
 
 	targetRepo := postgres.NewTargetRepository(pool)
 	checkRepo := postgres.NewCheckRepository(pool)
@@ -107,7 +138,7 @@ func main() {
 	getOpenIncidentUseCase := usecase.NewGetOpenIncidentUseCase(incidentRepo)
 	listIncidentsUseCase := usecase.NewListIncidentsUseCase(incidentRepo)
 	calculateUptimeUseCase := usecase.NewCalculateUptimeUseCase(incidentRepo)
-	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier)
+	createAlertUseCase := usecase.NewCreateAlertUseCase(alertRepo, userRepo, telegramNotifier, alertDeduplicator)
 	processCheckUseCase := usecase.NewProcessCheckUseCase(checkRepo, incidentRepo, createAlertUseCase)
 	cleanupCheckHistoryUseCase := usecase.NewCleanupCheckHistoryUseCase(checkRepo, 30*24*time.Hour)
 

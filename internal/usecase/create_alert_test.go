@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -17,9 +18,10 @@ type MockAlertRepository struct {
 func (m *MockAlertRepository) CreateAlert(
 	ctx context.Context,
 	alert *domain.Alert,
-) error {
+) (bool, error) {
 	args := m.Called(ctx, alert)
-	return args.Error(0)
+
+	return args.Bool(0), args.Error(1)
 }
 
 type MockNotifier struct {
@@ -32,6 +34,41 @@ func (m *MockNotifier) Send(
 	message string,
 ) error {
 	args := m.Called(ctx, chatID, message)
+
+	return args.Error(0)
+}
+
+type MockAlertDeduplicator struct {
+	mock.Mock
+}
+
+func (m *MockAlertDeduplicator) Claim(
+	ctx context.Context,
+	incidentID int,
+	alertType string,
+	ttl time.Duration,
+) (bool, error) {
+	args := m.Called(
+		ctx,
+		incidentID,
+		alertType,
+		ttl,
+	)
+
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockAlertDeduplicator) Release(
+	ctx context.Context,
+	incidentID int,
+	alertType string,
+) error {
+	args := m.Called(
+		ctx,
+		incidentID,
+		alertType,
+	)
+
 	return args.Error(0)
 }
 
@@ -39,6 +76,7 @@ func TestCreateAlert_Success(t *testing.T) {
 	// Arrange
 	alertRepo := new(MockAlertRepository)
 	notifier := new(MockNotifier)
+	deduplicator := new(MockAlertDeduplicator)
 
 	user := &domain.User{
 		ID:         1,
@@ -53,11 +91,19 @@ func TestCreateAlert_Success(t *testing.T) {
 		alertRepo,
 		userRepo,
 		notifier,
+		deduplicator,
 	)
 
 	message := "🔴 Website unavailable"
 
-	// Проверяем, что сначала сохраняется нужный алерт.
+	deduplicator.On(
+		"Claim",
+		mock.Anything,
+		42,
+		"DOWN",
+		10*time.Minute,
+	).Return(true, nil).Once()
+
 	alertRepo.On(
 		"CreateAlert",
 		mock.Anything,
@@ -68,9 +114,8 @@ func TestCreateAlert_Success(t *testing.T) {
 				alert.Message == message &&
 				!alert.CreatedAt.IsZero()
 		}),
-	).Return(nil).Once()
+	).Return(true, nil).Once()
 
-	// После сохранения сообщение отправляется пользователю.
 	notifier.On(
 		"Send",
 		mock.Anything,
@@ -90,24 +135,93 @@ func TestCreateAlert_Success(t *testing.T) {
 	// Assert
 	require.NoError(t, err)
 
+	deduplicator.AssertExpectations(t)
 	alertRepo.AssertExpectations(t)
 	notifier.AssertExpectations(t)
+
+	deduplicator.AssertNotCalled(
+		t,
+		"Release",
+		mock.Anything,
+		42,
+		"DOWN",
+	)
 }
 
-func TestCreateAlert_RepositoryError(t *testing.T) {
+func TestCreateAlert_AlreadyClaimed(t *testing.T) {
 	// Arrange
 	alertRepo := new(MockAlertRepository)
 	notifier := new(MockNotifier)
+	deduplicator := new(MockAlertDeduplicator)
+
 	userRepo := &fakeUserRepository{}
 
 	uc := NewCreateAlertUseCase(
 		alertRepo,
 		userRepo,
 		notifier,
+		deduplicator,
+	)
+
+	deduplicator.On(
+		"Claim",
+		mock.Anything,
+		42,
+		"DOWN",
+		10*time.Minute,
+	).Return(false, nil).Once()
+
+	// Act
+	err := uc.CreateAlert(
+		context.Background(),
+		42,
+		1,
+		"DOWN",
+		"🔴 Website unavailable",
+	)
+
+	// Assert
+	require.NoError(t, err)
+
+	deduplicator.AssertExpectations(t)
+
+	require.Empty(t, alertRepo.Calls)
+	require.Empty(t, notifier.Calls)
+
+	deduplicator.AssertNotCalled(
+		t,
+		"Release",
+		mock.Anything,
+		42,
+		"DOWN",
+	)
+}
+
+func TestCreateAlert_RepositoryError_ReleasesClaim(t *testing.T) {
+	// Arrange
+	alertRepo := new(MockAlertRepository)
+	notifier := new(MockNotifier)
+	deduplicator := new(MockAlertDeduplicator)
+
+	userRepo := &fakeUserRepository{}
+
+	uc := NewCreateAlertUseCase(
+		alertRepo,
+		userRepo,
+		notifier,
+		deduplicator,
 	)
 
 	expectedErr := errors.New("failed to save alert")
 	message := "🔴 Website unavailable"
+
+	deduplicator.On(
+		"Claim",
+		mock.Anything,
+		42,
+		"DOWN",
+		10*time.Minute,
+	).Return(true, nil).Once()
 
 	alertRepo.On(
 		"CreateAlert",
@@ -118,7 +232,14 @@ func TestCreateAlert_RepositoryError(t *testing.T) {
 				alert.Type == "DOWN" &&
 				alert.Message == message
 		}),
-	).Return(expectedErr).Once()
+	).Return(false, expectedErr).Once()
+
+	deduplicator.On(
+		"Release",
+		mock.Anything,
+		42,
+		"DOWN",
+	).Return(nil).Once()
 
 	// Act
 	err := uc.CreateAlert(
@@ -132,16 +253,74 @@ func TestCreateAlert_RepositoryError(t *testing.T) {
 	// Assert
 	require.ErrorIs(t, err, expectedErr)
 
+	deduplicator.AssertExpectations(t)
 	alertRepo.AssertExpectations(t)
 
-	// При ошибке сохранения Telegram не вызывается.
 	require.Empty(t, notifier.Calls)
 }
 
-func TestCreateAlert_NotifierError(t *testing.T) {
+func TestCreateAlert_AlreadyExistsInRepository(t *testing.T) {
 	// Arrange
 	alertRepo := new(MockAlertRepository)
 	notifier := new(MockNotifier)
+	deduplicator := new(MockAlertDeduplicator)
+
+	userRepo := &fakeUserRepository{}
+
+	uc := NewCreateAlertUseCase(
+		alertRepo,
+		userRepo,
+		notifier,
+		deduplicator,
+	)
+
+	message := "🔴 Website unavailable"
+
+	deduplicator.On(
+		"Claim",
+		mock.Anything,
+		42,
+		"DOWN",
+		10*time.Minute,
+	).Return(true, nil).Once()
+
+	alertRepo.On(
+		"CreateAlert",
+		mock.Anything,
+		mock.AnythingOfType("*domain.Alert"),
+	).Return(false, nil).Once()
+
+	// Act
+	err := uc.CreateAlert(
+		context.Background(),
+		42,
+		1,
+		"DOWN",
+		message,
+	)
+
+	// Assert
+	require.NoError(t, err)
+
+	deduplicator.AssertExpectations(t)
+	alertRepo.AssertExpectations(t)
+
+	require.Empty(t, notifier.Calls)
+
+	deduplicator.AssertNotCalled(
+		t,
+		"Release",
+		mock.Anything,
+		42,
+		"DOWN",
+	)
+}
+
+func TestCreateAlert_NotifierError_DoesNotReleaseClaim(t *testing.T) {
+	// Arrange
+	alertRepo := new(MockAlertRepository)
+	notifier := new(MockNotifier)
+	deduplicator := new(MockAlertDeduplicator)
 
 	user := &domain.User{
 		ID:         1,
@@ -156,12 +335,20 @@ func TestCreateAlert_NotifierError(t *testing.T) {
 		alertRepo,
 		userRepo,
 		notifier,
+		deduplicator,
 	)
 
 	message := "🔴 Website unavailable"
 	expectedErr := errors.New("telegram unavailable")
 
-	// Сохранение алерта проходит успешно.
+	deduplicator.On(
+		"Claim",
+		mock.Anything,
+		42,
+		"DOWN",
+		10*time.Minute,
+	).Return(true, nil).Once()
+
 	alertRepo.On(
 		"CreateAlert",
 		mock.Anything,
@@ -171,9 +358,8 @@ func TestCreateAlert_NotifierError(t *testing.T) {
 				alert.Type == "DOWN" &&
 				alert.Message == message
 		}),
-	).Return(nil).Once()
+	).Return(true, nil).Once()
 
-	// Но Telegram возвращает ошибку.
 	notifier.On(
 		"Send",
 		mock.Anything,
@@ -193,6 +379,15 @@ func TestCreateAlert_NotifierError(t *testing.T) {
 	// Assert
 	require.ErrorIs(t, err, expectedErr)
 
+	deduplicator.AssertExpectations(t)
 	alertRepo.AssertExpectations(t)
 	notifier.AssertExpectations(t)
+
+	deduplicator.AssertNotCalled(
+		t,
+		"Release",
+		mock.Anything,
+		42,
+		"DOWN",
+	)
 }

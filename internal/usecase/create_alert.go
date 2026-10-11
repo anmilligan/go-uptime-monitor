@@ -3,11 +3,18 @@ package usecase
 import (
 	"Uptime_Monitor/internal/domain"
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
 type IAlertRepository interface {
-	CreateAlert(ctx context.Context, alert *domain.Alert) error
+	CreateAlert(ctx context.Context, alert *domain.Alert) (bool, error)
+}
+
+type IAlertDeduplicator interface {
+	Claim(ctx context.Context, incidentID int, alertType string, ttl time.Duration) (bool, error)
+	Release(ctx context.Context, incidentID int, alertType string) error
 }
 
 type INotifier interface {
@@ -15,20 +22,23 @@ type INotifier interface {
 }
 
 type CreateAlertUseCase struct {
-	alertRepo IAlertRepository
-	userRepo  IUserRepository
-	notifier  INotifier
+	alertRepo    IAlertRepository
+	userRepo     IUserRepository
+	notifier     INotifier
+	deduplicator IAlertDeduplicator
 }
 
 func NewCreateAlertUseCase(
 	alertRepo IAlertRepository,
 	userRepo IUserRepository,
 	notifier INotifier,
+	deduplicator IAlertDeduplicator,
 ) *CreateAlertUseCase {
 	return &CreateAlertUseCase{
-		alertRepo: alertRepo,
-		userRepo:  userRepo,
-		notifier:  notifier,
+		alertRepo:    alertRepo,
+		userRepo:     userRepo,
+		notifier:     notifier,
+		deduplicator: deduplicator,
 	}
 }
 
@@ -39,6 +49,8 @@ func (uc *CreateAlertUseCase) CreateAlert(
 	alertType string,
 	message string,
 ) error {
+	const dedupTTL = 10 * time.Minute
+
 	alert := &domain.Alert{
 		IncidentID: incidentID,
 		Type:       alertType,
@@ -50,8 +62,38 @@ func (uc *CreateAlertUseCase) CreateAlert(
 		return err
 	}
 
-	if err := uc.alertRepo.CreateAlert(ctx, alert); err != nil {
-		return err
+	claimed, err := uc.deduplicator.Claim(
+		ctx,
+		incidentID,
+		alertType,
+		dedupTTL,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"claim alert deduplication: %w",
+			err,
+		)
+	}
+
+	if !claimed {
+		return nil
+	}
+
+	created, err := uc.alertRepo.CreateAlert(
+		ctx,
+		alert,
+	)
+	if err != nil {
+		return uc.releaseClaim(
+			ctx,
+			incidentID,
+			alertType,
+			err,
+		)
+	}
+
+	if !created {
+		return nil
 	}
 
 	user, err := uc.userRepo.GetByID(ctx, userID)
@@ -59,5 +101,38 @@ func (uc *CreateAlertUseCase) CreateAlert(
 		return err
 	}
 
-	return uc.notifier.Send(ctx, user.TelegramID, message)
+	if err := uc.notifier.Send(
+		ctx,
+		user.TelegramID,
+		message,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (uc *CreateAlertUseCase) releaseClaim(
+	ctx context.Context,
+	incidentID int,
+	alertType string,
+	originalErr error,
+) error {
+	releaseCtx := context.WithoutCancel(ctx)
+
+	if err := uc.deduplicator.Release(
+		releaseCtx,
+		incidentID,
+		alertType,
+	); err != nil {
+		return errors.Join(
+			originalErr,
+			fmt.Errorf(
+				"release alert deduplication: %w",
+				err,
+			),
+		)
+	}
+
+	return originalErr
 }

@@ -3,7 +3,9 @@ package postgres
 import (
 	"Uptime_Monitor/internal/domain"
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,7 +19,10 @@ func NewAlertRepository(pool *pgxpool.Pool) *AlertRepository {
 	}
 }
 
-func (r *AlertRepository) CreateAlert(ctx context.Context, alert *domain.Alert) error {
+func (r *AlertRepository) CreateAlert(
+	ctx context.Context,
+	alert *domain.Alert,
+) (bool, error) {
 	query := `
 		INSERT INTO alerts (
 			incident_id,
@@ -26,10 +31,11 @@ func (r *AlertRepository) CreateAlert(ctx context.Context, alert *domain.Alert) 
 			created_at
 		)
 		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (incident_id, type) DO NOTHING
 		RETURNING id
 	`
 
-	return r.pool.QueryRow(
+	err := r.pool.QueryRow(
 		ctx,
 		query,
 		alert.IncidentID,
@@ -37,4 +43,14 @@ func (r *AlertRepository) CreateAlert(ctx context.Context, alert *domain.Alert) 
 		alert.Message,
 		alert.CreatedAt,
 	).Scan(&alert.ID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
