@@ -1,1 +1,6 @@
 welcome-to-docker/
+.env
+monitor
+uptime-monitor
+escape-analysis.txt
+grafana-backup/
