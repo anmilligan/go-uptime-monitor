@@ -134,11 +134,17 @@ services:
     image: grafana/grafana:latest
     container_name: uptime-monitor-grafana
 
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+
     ports:
       - "3000:3000"
 
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
     depends_on:
       - prometheus
@@ -155,5 +161,3 @@ volumes:
   prometheus_data:
 
   grafana_data:
-    external: true
-    name: uptime-monitor-grafana-data
