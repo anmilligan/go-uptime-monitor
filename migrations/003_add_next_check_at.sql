@@ -1,3 +1,4 @@
+-- +goose Up
 ALTER TABLE targets
     ADD COLUMN next_check_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 

@@ -26,6 +26,20 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  migrate:
+      build:
+        context: .
+        dockerfile: Dockerfile.migrate
+      image: uptime-monitor-migrate:local
+      container_name: uptime-monitor-migrate
+      command:
+        - postgres
+        - "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+        - up
+      depends_on:
+        postgres:
+          condition: service_healthy
+      restart: "no"
 
   redis:
     image: redis:7-alpine
@@ -68,6 +82,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
     healthcheck:
       test:

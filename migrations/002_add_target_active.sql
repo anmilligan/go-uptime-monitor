@@ -1,2 +1,3 @@
+-- +goose Up
 ALTER TABLE targets
     ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;

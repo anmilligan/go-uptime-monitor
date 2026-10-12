@@ -4,3 +4,4 @@ monitor
 uptime-monitor
 escape-analysis.txt
 grafana-backup/
+before-goose-baseline.sql

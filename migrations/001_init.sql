@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE users (
 	id BIGSERIAL PRIMARY KEY,
 	telegram_id BIGINT NOT NULL UNIQUE,
