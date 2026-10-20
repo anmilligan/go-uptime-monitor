@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -149,229 +147,117 @@ func monitorButtonLabel(target domain.Target) string {
 	return fmt.Sprintf("%s #%d — %s", state, target.ID, name)
 }
 
-// sendMonitorDetails collects the current monitor state
-// and sends it together with available actions.
+// sendMonitorDetails sends the current monitor state
+// together with available inline actions.
 func (b *Bot) sendMonitorDetails(ctx context.Context, chatID int64, target *domain.Target) error {
-	check, err := b.lastCheck.GetLastCheck(ctx, target.ID)
-	if err != nil {
-		return fmt.Errorf("get last check: %w", err)
-	}
-
-	incident, err := b.openIncident.GetOpenIncident(ctx, target.ID)
-	if err != nil {
-		return fmt.Errorf("get open incident: %w", err)
-	}
-
-	uptime24h, err := b.uptime.CalculateUptime(
+	response, err := b.buildMonitorDetailsText(
 		ctx,
-		target.ID,
-		target.CreatedAt,
-		24*time.Hour,
+		target,
 	)
 	if err != nil {
-		return fmt.Errorf("calculate 24h uptime: %w", err)
+		return err
 	}
 
-	uptime7d, err := b.uptime.CalculateUptime(
-		ctx,
-		target.ID,
-		target.CreatedAt,
-		7*24*time.Hour,
-	)
-	if err != nil {
-		return fmt.Errorf("calculate 7d uptime: %w", err)
-	}
-
-	var response strings.Builder
-
-	fmt.Fprintf(
-		&response,
-		"🌐 Monitor #%d\n\n"+
-			"Address: %s\n"+
-			"Type: %s\n"+
-			"Interval: %d seconds\n",
-		target.ID,
-		target.Address,
-		strings.ToUpper(target.Kind),
-		int64(target.Interval/time.Second),
-	)
-
-	if target.Active {
-		response.WriteString("Monitoring: ▶️ ACTIVE\n")
-	} else {
-		response.WriteString("Monitoring: ⏸ PAUSED\n")
-	}
-
-	switch {
-	case !target.Active:
-		response.WriteString("Status: ⏸ PAUSED\n")
-	case incident != nil:
-		response.WriteString("Status: 🔴 DOWN\n")
-	case check == nil:
-		response.WriteString("Status: ⚪ UNKNOWN\n")
-	case check.IsSuccess:
-		response.WriteString("Status: 🟢 UP\n")
-	default:
-		response.WriteString("Status: 🟠 Recent check failed; no open incident\n")
-	}
-
-	if check != nil {
-		if check.IsSuccess {
-			response.WriteString("Last check: 🟢 Successful\n")
-		} else {
-			response.WriteString("Last check: 🔴 Failed\n")
-		}
-
-		if target.Kind == "http" && check.Status != 0 {
-			fmt.Fprintf(&response, "HTTP status: %d\n", check.Status)
-		}
-
-		fmt.Fprintf(
-			&response,
-			"Latency: %d ms\nChecked at: %s\n",
-			check.ResponseTime.Milliseconds(),
-			check.CheckedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
+	actionButton :=
+		tgbotapi.NewInlineKeyboardButtonData(
+			"⏸ Pause",
+			fmt.Sprintf(
+				"pause:%d",
+				target.ID,
+			),
 		)
-	}
 
-	response.WriteString("\nUptime:\n")
-
-	if uptime24h.HasData {
-		fmt.Fprintf(
-			&response,
-			"24h: %.2f%% (observed %s)\n",
-			uptime24h.Percentage,
-			formatObservedDuration(uptime24h.ObservedFor),
-		)
-	} else {
-		response.WriteString("24h: not enough data yet\n")
-	}
-
-	if uptime7d.HasData {
-		fmt.Fprintf(
-			&response,
-			"7d: %.2f%% (observed %s)\n",
-			uptime7d.Percentage,
-			formatObservedDuration(uptime7d.ObservedFor),
-		)
-	} else {
-		response.WriteString("7d: not enough data yet\n")
-	}
-
-	if incident != nil {
-		fmt.Fprintf(
-			&response,
-			"\nOpen incident: #%d\nStarted at: %s\n",
-			incident.ID,
-			incident.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
-		)
-	} else {
-		response.WriteString("\nOpen incident: None\n")
-	}
-
-	actionButton := tgbotapi.NewInlineKeyboardButtonData(
-		"⏸ Pause",
-		fmt.Sprintf("pause:%d", target.ID),
-	)
 	if !target.Active {
-		actionButton = tgbotapi.NewInlineKeyboardButtonData(
-			"▶️ Resume",
-			fmt.Sprintf("resume:%d", target.ID),
-		)
+		actionButton =
+			tgbotapi.NewInlineKeyboardButtonData(
+				"▶️ Resume",
+				fmt.Sprintf(
+					"resume:%d",
+					target.ID,
+				),
+			)
 	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
 				"🚨 Incidents",
-				fmt.Sprintf("incidents:%d", target.ID),
+				fmt.Sprintf(
+					"incidents:%d",
+					target.ID,
+				),
 			),
 			actionButton,
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
 				"🗑 Remove",
-				fmt.Sprintf("remove:%d", target.ID),
+				fmt.Sprintf(
+					"remove:%d",
+					target.ID,
+				),
 			),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("‹ Back to monitors", "menu:list"),
-			tgbotapi.NewInlineKeyboardButtonData("⌂ Main menu", "menu:main"),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"‹ Back to monitors",
+				"menu:list",
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"⌂ Main menu",
+				"menu:main",
+			),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, response.String())
+	msg := tgbotapi.NewMessage(
+		chatID,
+		response,
+	)
+
 	msg.ReplyMarkup = keyboard
 
 	_, err = b.api.Send(msg)
+
 	return err
 }
 
 // sendMonitorIncidents sends the recent incident history
-// for the selected monitor.
-func (b *Bot) sendMonitorIncidents(ctx context.Context, chatID int64, target *domain.Target) error {
-	incidents, err := b.listIncidents.ListIncidents(ctx, target.ID, 5)
+// together with navigation back to the selected monitor.
+func (b *Bot) sendMonitorIncidents(
+	ctx context.Context,
+	chatID int64,
+	target *domain.Target,
+) error {
+	response, err := b.buildMonitorIncidentsText(
+		ctx,
+		target,
+	)
 	if err != nil {
-		return fmt.Errorf("list incidents: %w", err)
-	}
-
-	var response strings.Builder
-
-	if len(incidents) == 0 {
-		fmt.Fprintf(
-			&response,
-			"✅ No incidents recorded for monitor #%d.\n",
-			target.ID,
-		)
-	} else {
-		fmt.Fprintf(
-			&response,
-			"🚨 Incidents for monitor #%d\nAddress: %s\n\n",
-			target.ID,
-			target.Address,
-		)
-
-		for _, incident := range incidents {
-			if incident.Status == "OPEN" {
-				fmt.Fprintf(
-					&response,
-					"🔴 Incident #%d — OPEN\n"+
-						"Started: %s\n"+
-						"Duration: %s and counting\n\n",
-					incident.ID,
-					incident.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
-					formatObservedDuration(time.Since(incident.CreatedAt)),
-				)
-				continue
-			}
-
-			fmt.Fprintf(
-				&response,
-				"⚫ Incident #%d — CLOSED\n"+
-					"Started: %s\n"+
-					"Resolved: %s\n"+
-					"Duration: %s\n\n",
-				incident.ID,
-				incident.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
-				incident.ClosedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
-				formatObservedDuration(incident.Duration()),
-			)
-		}
+		return err
 	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
 				"‹ Back to monitor",
-				fmt.Sprintf("monitor:%d", target.ID),
+				fmt.Sprintf(
+					"monitor:%d",
+					target.ID,
+				),
 			),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, response.String())
+	msg := tgbotapi.NewMessage(
+		chatID,
+		response,
+	)
+
 	msg.ReplyMarkup = keyboard
 
 	_, err = b.api.Send(msg)
+
 	return err
 }
 
