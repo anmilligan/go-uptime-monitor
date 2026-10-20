@@ -57,6 +57,14 @@ func (b *Bot) handleCallback(ctx context.Context, callback *tgbotapi.CallbackQue
 			username,
 		)
 
+	case "menu:list_full":
+		return b.handleListForUser(
+			ctx,
+			chatID,
+			telegramUserID,
+			username,
+		)
+
 	case "menu:help":
 		return b.sendHelp(ctx, chatID)
 

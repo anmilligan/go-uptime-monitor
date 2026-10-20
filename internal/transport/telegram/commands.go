@@ -126,9 +126,14 @@ func (b *Bot) handleList(ctx context.Context, message *tgbotapi.Message) error {
 	)
 }
 
-// handleListForUser builds and sends a summary of all monitors
+// handleListForUser builds and sends a compact summary of all monitors
 // owned by the specified Telegram user.
-func (b *Bot) handleListForUser(ctx context.Context, chatID int64, telegramUserID int64, username string) error {
+func (b *Bot) handleListForUser(
+	ctx context.Context,
+	chatID int64,
+	telegramUserID int64,
+	username string,
+) error {
 	user, err := b.register.Register(
 		ctx,
 		telegramUserID,
@@ -165,32 +170,11 @@ func (b *Bot) handleListForUser(ctx context.Context, chatID int64, telegramUserI
 
 	fmt.Fprintf(
 		&response,
-		"📋 Your monitors (%d)\n\n",
+		"📊 Monitors (%d)\n\n",
 		len(targets),
 	)
 
 	for _, target := range targets {
-		fmt.Fprintf(
-			&response,
-			"🔹 #%d — %s\n"+
-				"Type: %s\n"+
-				"Interval: %d seconds\n",
-			target.ID,
-			target.Address,
-			strings.ToUpper(target.Kind),
-			int64(target.Interval/time.Second),
-		)
-
-		if target.Active {
-			response.WriteString(
-				"Monitoring: ▶️ ACTIVE\n",
-			)
-		} else {
-			response.WriteString(
-				"Monitoring: ⏸ PAUSED\n",
-			)
-		}
-
 		check, err := b.lastCheck.GetLastCheck(
 			ctx,
 			target.ID,
@@ -203,42 +187,77 @@ func (b *Bot) handleListForUser(ctx context.Context, chatID int64, telegramUserI
 			)
 		}
 
-		if check == nil {
-			response.WriteString(
-				"Last check: ⚪ UNKNOWN\n\n",
-			)
-			continue
-		}
-
-		if check.IsSuccess {
-			response.WriteString(
-				"Last check: 🟢 Successful\n",
-			)
-		} else {
-			response.WriteString(
-				"Last check: 🔴 Failed\n",
+		incident, err := b.openIncident.GetOpenIncident(
+			ctx,
+			target.ID,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"get open incident for target %d: %w",
+				target.ID,
+				err,
 			)
 		}
 
-		if target.Kind == "http" &&
-			check.Status != 0 {
-
-			fmt.Fprintf(
-				&response,
-				"HTTP status: %d\n",
-				check.Status,
+		uptime24h, err := b.uptime.CalculateUptime(
+			ctx,
+			target.ID,
+			target.CreatedAt,
+			24*time.Hour,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"calculate 24h uptime for target %d: %w",
+				target.ID,
+				err,
 			)
 		}
 
 		fmt.Fprintf(
 			&response,
-			"Latency: %d ms\n"+
-				"Checked at: %s\n\n",
-			check.ResponseTime.Milliseconds(),
-			check.CheckedAt.UTC().Format(
-				"2006-01-02 15:04:05 UTC",
-			),
+			"#%d — %s\n",
+			target.ID,
+			target.Address,
 		)
+
+		switch {
+		case !target.Active:
+			response.WriteString(
+				"Status: ⏸ PAUSED\n",
+			)
+
+		case incident != nil:
+			response.WriteString(
+				"Status: 🔴 DOWN\n",
+			)
+
+		case check == nil:
+			response.WriteString(
+				"Status: ⚪ UNKNOWN\n",
+			)
+
+		case check.IsSuccess:
+			response.WriteString(
+				"Status: 🟢 UP\n",
+			)
+
+		default:
+			response.WriteString(
+				"Status: 🟠 DEGRADED\n",
+			)
+		}
+
+		if uptime24h.HasData {
+			fmt.Fprintf(
+				&response,
+				"Uptime 24h: %.2f%%\n\n",
+				uptime24h.Percentage,
+			)
+		} else {
+			response.WriteString(
+				"Uptime 24h: not enough data yet\n\n",
+			)
+		}
 	}
 
 	return b.notifier.Send(

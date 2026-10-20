@@ -28,6 +28,10 @@ func (b *Bot) sendMainMenu(ctx context.Context, chatID int64) error {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
+				"📊 List",
+				"menu:list_full",
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
 				"❓ Help",
 				"menu:help",
 			),
