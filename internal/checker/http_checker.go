@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const maxResponseBodySize int64 = 1 << 20
+
 type HTTPChecker struct {
 	client *http.Client
 }
@@ -18,6 +20,8 @@ func NewHTTPChecker() *HTTPChecker {
 		client: &http.Client{},
 	}
 }
+
+// Check performs an HTTP GET request for the target and returns the check result.
 func (c *HTTPChecker) Check(ctx context.Context, target *domain.Target) domain.CheckResult {
 	startedAt := time.Now()
 
@@ -53,7 +57,9 @@ func (c *HTTPChecker) Check(ctx context.Context, target *domain.Target) domain.C
 
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(
+		io.LimitReader(resp.Body, maxResponseBodySize),
+	)
 	if err != nil {
 		return domain.CheckResult{
 			Status:       resp.StatusCode,

@@ -6,16 +6,16 @@ import (
 )
 
 type Target struct {
-	ID             int           // уникальный номер в бд
-	UserID         int           // айди пользователя, который добавил сайт
-	Kind           string        // тип проверки: http или tcp
-	Address        string        // URL для HTTP или host:port для TCP
+	ID             int
+	UserID         int
+	Kind           string
+	Address        string
 	Interval       time.Duration // как часто проверять
 	Timeout        time.Duration // сколько ждать ответа
-	ExpectedStatus int           // ожидаемый HTTP-статус
-	ExpectedBody   string        // ожидаемая строка в теле ответа
-	CreatedAt      time.Time     // когда этот монитор был создан
-	Active         bool          // участвует ли монитор в плановых проверках
+	ExpectedStatus int
+	ExpectedBody   string
+	CreatedAt      time.Time
+	Active         bool // участвует ли монитор в плановых проверках
 }
 
 func (t *Target) Validate() error {
@@ -32,7 +32,7 @@ func (t *Target) Validate() error {
 		return errors.New("The timeout must be greater than zero")
 	}
 	if t.Kind == "http" {
-		if t.ExpectedStatus < 100 || t.ExpectedStatus > 600 {
+		if t.ExpectedStatus < 100 || t.ExpectedStatus > 599 {
 			return errors.New("Invalid expected HTTP status")
 		}
 	}

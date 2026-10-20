@@ -11,19 +11,14 @@ type RegisterTelegramUserUseCase struct {
 	userRepo IUserRepository
 }
 
-func NewRegisterTelegramUserUseCase(
-	userRepo IUserRepository,
-) *RegisterTelegramUserUseCase {
+func NewRegisterTelegramUserUseCase(userRepo IUserRepository) *RegisterTelegramUserUseCase {
 	return &RegisterTelegramUserUseCase{
 		userRepo: userRepo,
 	}
 }
 
-func (uc *RegisterTelegramUserUseCase) Register(
-	ctx context.Context,
-	telegramID int64,
-	username string,
-) (*domain.User, error) {
+// Register registers or updates a Telegram user in the application.
+func (uc *RegisterTelegramUserUseCase) Register(ctx context.Context, telegramID int64, username string) (*domain.User, error) {
 	username = strings.TrimSpace(username)
 
 	if username == "" {

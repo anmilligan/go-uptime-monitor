@@ -19,10 +19,9 @@ func NewAlertRepository(pool *pgxpool.Pool) *AlertRepository {
 	}
 }
 
-func (r *AlertRepository) CreateAlert(
-	ctx context.Context,
-	alert *domain.Alert,
-) (bool, error) {
+// CreateAlert inserts an alert if an alert with the same incident and type
+// does not already exist. It returns true if a new alert was created.
+func (r *AlertRepository) CreateAlert(ctx context.Context, alert *domain.Alert) (bool, error) {
 	query := `
 		INSERT INTO alerts (
 			incident_id,

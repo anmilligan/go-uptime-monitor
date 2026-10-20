@@ -20,10 +20,10 @@ func NewIncidentRepository(pool *pgxpool.Pool) *IncidentRepository {
 		pool: pool,
 	}
 }
-func (r *IncidentRepository) GetOpenIncident(
-	ctx context.Context,
-	targetID int,
-) (*domain.Incident, error) {
+
+// GetOpenIncident returns the currently open incident for a target.
+// It returns nil without an error if no open incident exists.
+func (r *IncidentRepository) GetOpenIncident(ctx context.Context, targetID int) (*domain.Incident, error) {
 	query := `
 		SELECT
 			id,
@@ -59,10 +59,9 @@ func (r *IncidentRepository) GetOpenIncident(
 
 	return &incident, nil
 }
-func (r *IncidentRepository) CreateIncident(
-	ctx context.Context,
-	incident *domain.Incident,
-) error {
+
+// CreateIncident inserts a new incident and populates its database-generated ID.
+func (r *IncidentRepository) CreateIncident(ctx context.Context, incident *domain.Incident) error {
 	query := `
 		INSERT INTO incidents (
 			target_id,
@@ -83,11 +82,9 @@ func (r *IncidentRepository) CreateIncident(
 
 	return err
 }
-func (r *IncidentRepository) CloseIncident(
-	ctx context.Context,
-	incidentID int,
-	closedAt time.Time,
-) error {
+
+// CloseIncident closes an open incident at the specified time.
+func (r *IncidentRepository) CloseIncident(ctx context.Context, incidentID int, closedAt time.Time) error {
 	query := `
 		UPDATE incidents
 		SET
@@ -107,12 +104,9 @@ func (r *IncidentRepository) CloseIncident(
 	return err
 }
 
-func (r *IncidentRepository) GetIncidentsForPeriod(
-	ctx context.Context,
-	targetID int,
-	from time.Time,
-	to time.Time,
-) ([]domain.Incident, error) {
+// GetIncidentsForPeriod returns all incidents that overlap
+// the specified time period.
+func (r *IncidentRepository) GetIncidentsForPeriod(ctx context.Context, targetID int, from time.Time, to time.Time) ([]domain.Incident, error) {
 	query := `
         SELECT
             id,
@@ -173,11 +167,9 @@ func (r *IncidentRepository) GetIncidentsForPeriod(
 	return incidents, nil
 }
 
-func (r *IncidentRepository) ListByTargetID(
-	ctx context.Context,
-	targetID int,
-	limit int,
-) ([]domain.Incident, error) {
+// ListByTargetID returns the most recent incidents for a target,
+// ordered from newest to oldest.
+func (r *IncidentRepository) ListByTargetID(ctx context.Context, targetID int, limit int) ([]domain.Incident, error) {
 	query := `
 		SELECT
 			id,
@@ -187,7 +179,7 @@ func (r *IncidentRepository) ListByTargetID(
 			closed_at
 		FROM incidents
 		WHERE target_id = $1
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $2
 	`
 

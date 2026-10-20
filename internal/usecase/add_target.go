@@ -6,21 +6,23 @@ import (
 	"time"
 )
 
+// IAddTargetRepository defines the storage operation required to add a target.
 type IAddTargetRepository interface {
 	Save(ctx context.Context, target *domain.Target) error
 }
 
-type AddTargetUseCase struct { // сценарий в котором лежит инструмент для работы с БД
-	targetRepo ITargetRepository
+type AddTargetUseCase struct {
+	targetRepo IAddTargetRepository
 }
 
-func NewAddTargetUseCase(repo ITargetRepository) *AddTargetUseCase { // функция которая создает наш сценарий
+// NewAddTargetUseCase creates a new AddTargetUseCase with the provided repository.
+func NewAddTargetUseCase(repo IAddTargetRepository) *AddTargetUseCase {
 	return &AddTargetUseCase{
 		targetRepo: repo,
 	}
 }
 
-type AddTargetRequest struct { // параметры описываемые пользователем
+type AddTargetRequest struct {
 	UserID         int
 	Kind           string
 	Address        string
@@ -30,7 +32,7 @@ type AddTargetRequest struct { // параметры описываемые по
 	ExpectedBody   string
 }
 
-func (uc *AddTargetUseCase) AddTarget(ctx context.Context, req AddTargetRequest) (*domain.Target, error) { // инструкция по добавлению сайта
+func (uc *AddTargetUseCase) AddTarget(ctx context.Context, req AddTargetRequest) (*domain.Target, error) {
 	target := &domain.Target{
 		UserID:         req.UserID,
 		Kind:           req.Kind,
@@ -39,13 +41,16 @@ func (uc *AddTargetUseCase) AddTarget(ctx context.Context, req AddTargetRequest)
 		Timeout:        req.Timeout,
 		ExpectedStatus: req.ExpectedStatus,
 		ExpectedBody:   req.ExpectedBody,
+		Active:         true,
 	}
 
-	if err := target.Validate(); err != nil { // запускаем проверку написанную в domain
+	if err := target.Validate(); err != nil {
 		return nil, err
 	}
-	if err := uc.targetRepo.Save(ctx, target); err != nil { // если все в порядке - просим репозиторий сохранить сайт в БД
+
+	if err := uc.targetRepo.Save(ctx, target); err != nil {
 		return nil, err
 	}
-	return target, nil // вернув созданный таргет появляется ID от БД
+
+	return target, nil
 }

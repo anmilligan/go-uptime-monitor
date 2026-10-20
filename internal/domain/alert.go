@@ -6,24 +6,31 @@ import (
 	"time"
 )
 
+const (
+	AlertTypeDown = "DOWN"
+	AlertTypeUp   = "UP"
+)
+
 type Alert struct {
 	ID         int
-	IncidentID int       // ID проверяемого сайта, который упал
-	Type       string    // Тип ошибки (например: Timeout)
-	Message    string    // Читаемое описание
-	CreatedAt  time.Time // Точное время ошибки
+	IncidentID int
+	Type       string
+	Message    string
+	CreatedAt  time.Time
 }
 
 func (a *Alert) Validate() error {
 	if a.IncidentID <= 0 {
-		return errors.New("The alert must be linked to an existing TargetID")
+		return errors.New("the alert must be linked to an existing incident")
 	}
 	a.Type = strings.TrimSpace(a.Type)
-	if a.Type == "" {
-		return errors.New("The Alert type cannot be empty")
+	if a.Type != AlertTypeDown && a.Type != AlertTypeUp {
+		return errors.New("the alert type must be DOWN or UP")
 	}
-	if strings.TrimSpace(a.Message) == "" {
-		return errors.New("The error description cannot be empty")
+	a.Message = strings.TrimSpace(a.Message)
+	if a.Message == "" {
+		return errors.New("the alert message cannot be empty")
 	}
+
 	return nil
 }

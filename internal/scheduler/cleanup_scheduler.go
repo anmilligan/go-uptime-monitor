@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// ICheckHistoryCleanupUseCase defines the operation required
+// to clean up expired check history.
 type ICheckHistoryCleanupUseCase interface {
 	Cleanup(ctx context.Context) (int64, error)
 }
@@ -22,8 +24,8 @@ func NewCleanupScheduler(cleanup ICheckHistoryCleanupUseCase, interval time.Dura
 	}
 }
 
+// Run starts the cleanup loop and stops when the context is canceled.
 func (s *CleanupScheduler) Run(ctx context.Context) {
-	// Сразу очищаем историю при запуске приложения.
 	s.runCleanup(ctx)
 
 	ticker := time.NewTicker(s.interval)
@@ -40,6 +42,7 @@ func (s *CleanupScheduler) Run(ctx context.Context) {
 	}
 }
 
+// runCleanup executes one cleanup cycle and logs the result.
 func (s *CleanupScheduler) runCleanup(ctx context.Context) {
 	deleted, err := s.cleanup.Cleanup(ctx)
 	if err != nil {

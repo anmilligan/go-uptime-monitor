@@ -7,17 +7,17 @@ import (
 	"time"
 )
 
+// IUptimeIncidentRepository defines the storage operation required
+// to retrieve incidents overlapping a specified time period.
 type IUptimeIncidentRepository interface {
 	GetIncidentsForPeriod(ctx context.Context, targetID int, from time.Time, to time.Time) ([]domain.Incident, error)
 }
-
 type UptimeResult struct {
 	Percentage  float64
 	ObservedFor time.Duration
 	Downtime    time.Duration
 	HasData     bool
 }
-
 type CalculateUptimeUseCase struct {
 	incidentRepo IUptimeIncidentRepository
 	now          func() time.Time
@@ -30,9 +30,17 @@ func NewCalculateUptimeUseCase(incidentRepo IUptimeIncidentRepository) *Calculat
 	}
 }
 
+// CalculateUptime calculates uptime for the specified target
+// over the requested observation period.
 func (uc *CalculateUptimeUseCase) CalculateUptime(ctx context.Context, targetID int, targetCreatedAt time.Time, period time.Duration) (*UptimeResult, error) {
 	if targetID <= 0 {
 		return nil, errors.New("target ID must be greater than zero")
+	}
+
+	if targetCreatedAt.IsZero() {
+		return nil, errors.New(
+			"target creation time must be set",
+		)
 	}
 
 	if period <= 0 {

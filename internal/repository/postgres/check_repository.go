@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CheckRepository provides PostgreSQL persistence for check history.
 type CheckRepository struct {
 	pool *pgxpool.Pool
 }
@@ -18,10 +19,8 @@ func NewCheckRepository(pool *pgxpool.Pool) *CheckRepository {
 	}
 }
 
-func (r *CheckRepository) SaveCheck(
-	ctx context.Context,
-	check *domain.Check,
-) error {
+// SaveCheck inserts a check and populates its database-generated ID.
+func (r *CheckRepository) SaveCheck(ctx context.Context, check *domain.Check) error {
 	query := `
         INSERT INTO checks (
             target_id,
@@ -48,11 +47,10 @@ func (r *CheckRepository) SaveCheck(
 
 	return err
 }
-func (r *CheckRepository) GetLastChecks(
-	ctx context.Context,
-	targetID int,
-	limit int,
-) ([]domain.Check, error) {
+
+// GetLastChecks returns the most recent checks for a target,
+// ordered from newest to oldest.
+func (r *CheckRepository) GetLastChecks(ctx context.Context, targetID int, limit int) ([]domain.Check, error) {
 	query := `
         SELECT
             id,
@@ -64,7 +62,7 @@ func (r *CheckRepository) GetLastChecks(
             checked_at
         FROM checks
         WHERE target_id = $1
-        ORDER BY checked_at DESC
+        ORDER BY checked_at DESC, id DESC
         LIMIT $2
     `
 
@@ -105,6 +103,8 @@ func (r *CheckRepository) GetLastChecks(
 	return checks, nil
 }
 
+// DeleteChecksBefore deletes checks older than the specified time
+// and returns the number of deleted records.
 func (r *CheckRepository) DeleteChecksBefore(ctx context.Context, before time.Time) (int64, error) {
 	const query = `
 		DELETE FROM checks

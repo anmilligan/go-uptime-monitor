@@ -17,6 +17,8 @@ func NewMetricsRepository(pool *pgxpool.Pool) *MetricsRepository {
 	}
 }
 
+// GetMonitorStatusCounts returns the number of monitors grouped
+// by their current derived status.
 func (r *MetricsRepository) GetMonitorStatusCounts(ctx context.Context) (map[string]int, error) {
 	const query = `
 		WITH latest_checks AS (
@@ -88,6 +90,7 @@ func (r *MetricsRepository) GetMonitorStatusCounts(ctx context.Context) (map[str
 	return counts, nil
 }
 
+// GetOpenIncidentsCount returns the number of currently open incidents.
 func (r *MetricsRepository) GetOpenIncidentsCount(ctx context.Context) (int, error) {
 	const query = `
 		SELECT COUNT(*)
@@ -107,6 +110,8 @@ func (r *MetricsRepository) GetOpenIncidentsCount(ctx context.Context) (int, err
 	return count, nil
 }
 
+// GetMonitorCreatedAt returns the creation time of each monitor
+// keyed by its target ID.
 func (r *MetricsRepository) GetMonitorCreatedAt(ctx context.Context) (map[int]time.Time, error) {
 	const query = `
 		SELECT id, created_at

@@ -13,10 +13,9 @@ func NewTCPChecker() *TCPChecker {
 	return &TCPChecker{}
 }
 
-func (c *TCPChecker) Check(
-	ctx context.Context,
-	target *domain.Target,
-) domain.CheckResult {
+// Check attempts to establish a TCP connection to the target
+// and returns the check result.
+func (c *TCPChecker) Check(ctx context.Context, target *domain.Target) domain.CheckResult {
 	startedAt := time.Now()
 
 	checkCtx, cancel := context.WithTimeout(ctx, target.Timeout)

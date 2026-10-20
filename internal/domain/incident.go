@@ -7,12 +7,14 @@ import (
 
 type Incident struct {
 	ID        int
-	TargetID  int       // ID сайта, который упал
-	Status    string    // Статус: "OPEN" (лежит прямо сейчас) или "CLOSED" (работа восстановлена)
-	CreatedAt time.Time // Время начала падения (когда зафиксировали N неудач подряд)
-	ClosedAt  time.Time // Время, когда сайт снова ожил
+	TargetID  int
+	Status    string
+	CreatedAt time.Time
+	ClosedAt  time.Time
 }
 
+// Duration returns the elapsed duration for an open incident
+// or the total downtime for a closed incident.
 func (i *Incident) Duration() time.Duration {
 	if i.Status == "OPEN" {
 		return time.Since(i.CreatedAt)
@@ -22,13 +24,13 @@ func (i *Incident) Duration() time.Duration {
 
 func (i *Incident) Validate() error {
 	if i.TargetID <= 0 {
-		return errors.New("The incident must be linked to an existing TargetID")
+		return errors.New("the incident must be linked to an existing TargetID")
 	}
 	if i.Status != "OPEN" && i.Status != "CLOSED" {
-		return errors.New("Incorrect incident status; it must be OPEN or CLOSED")
+		return errors.New("incorrect incident status; it must be OPEN or CLOSED")
 	}
 	if i.Status == "CLOSED" && i.ClosedAt.Before(i.CreatedAt) {
-		return errors.New("The time an incident is closed cannot be earlier than the time it was opened")
+		return errors.New("the time an incident is closed cannot be earlier than the time it was opened")
 	}
 	return nil
 }

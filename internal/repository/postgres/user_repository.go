@@ -17,10 +17,8 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	}
 }
 
-func (r *UserRepository) GetByID(
-	ctx context.Context,
-	id int,
-) (*domain.User, error) {
+// GetByID returns a user by its internal ID.
+func (r *UserRepository) GetByID(ctx context.Context, id int) (*domain.User, error) {
 	query := `
 		SELECT
 			id,
@@ -50,10 +48,9 @@ func (r *UserRepository) GetByID(
 	return &user, nil
 }
 
-func (r *UserRepository) Upsert(
-	ctx context.Context,
-	user *domain.User,
-) error {
+// Upsert creates a user or updates the username of an existing user
+// identified by the same Telegram ID.
+func (r *UserRepository) Upsert(ctx context.Context, user *domain.User) error {
 	query := `
         INSERT INTO users (
             telegram_id,

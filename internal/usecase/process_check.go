@@ -36,6 +36,8 @@ func NewProcessCheckUseCase(checkRepo ICheckRepository, incidentRepo IIncidentRe
 	}
 }
 
+// ProcessCheck stores a check result and updates the incident state,
+// creating DOWN or UP alerts when the target crosses a state boundary.
 func (uc *ProcessCheckUseCase) ProcessCheck(ctx context.Context, target *domain.Target, result domain.CheckResult, consecutiveFailuresLimit int) error {
 
 	resultText := "success"
@@ -53,7 +55,6 @@ func (uc *ProcessCheckUseCase) ProcessCheck(ctx context.Context, target *domain.
 		"latency_ms", result.ResponseTime.Milliseconds(),
 	)
 
-	// создаем и сохраняем технический лог проверки
 	check := &domain.Check{
 		TargetID:     target.ID,
 		Status:       result.Status,
@@ -79,25 +80,24 @@ func (uc *ProcessCheckUseCase) ProcessCheck(ctx context.Context, target *domain.
 
 func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain.Target, limit int) error {
 	existing, err := uc.incidentRepo.GetOpenIncident(ctx, target.ID)
-	// проверяем не открыт ли инцидент уже
 	if err != nil {
 		return err
 	}
 	if existing != nil {
 		return nil
 	}
-	history, err := uc.checkRepo.GetLastChecks(ctx, target.ID, limit) // запрашиваем историю последних проверок, чтобы узнать количество подряд идущих ошибок
+	history, err := uc.checkRepo.GetLastChecks(ctx, target.ID, limit)
 	if err != nil {
 		return err
 	}
 
-	failuresCount := 0 // считаем, сколько последних проверок были неудачными
+	failuresCount := 0
 
 	for _, check := range history {
 		if !check.IsSuccess {
-			failuresCount++ // увеличиваем счетчик ошибок
+			failuresCount++
 		} else {
-			break // наткнулись на успешную проверку — серия прервалась
+			break
 		}
 
 	}
@@ -133,13 +133,13 @@ func (uc *ProcessCheckUseCase) handleFailure(ctx context.Context, target *domain
 		ctx,
 		incident.ID,
 		target.UserID,
-		"DOWN",
+		domain.AlertTypeDown,
 		"🔴 Website unavailable",
 	)
 }
 
-func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domain.Target) error { // создаем метод восстановления
-	openIncident, err := uc.incidentRepo.GetOpenIncident(ctx, target.ID) // получаем открытый инцидент
+func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domain.Target) error {
+	openIncident, err := uc.incidentRepo.GetOpenIncident(ctx, target.ID)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (uc *ProcessCheckUseCase) handleRecovery(ctx context.Context, target *domai
 		ctx,
 		openIncident.ID,
 		target.UserID,
-		"UP",
+		domain.AlertTypeUp,
 		"🟢 Website is available again",
 	)
 }

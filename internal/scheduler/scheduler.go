@@ -9,28 +9,25 @@ import (
 	"time"
 )
 
+// ITargetRepository defines the operation required to claim targets
+// that are due for scheduled checks.
 type ITargetRepository interface {
-	ClaimDueTargets(
-		ctx context.Context,
-		limit int,
-	) ([]domain.ScheduledTarget, error)
+	ClaimDueTargets(ctx context.Context, limit int) ([]domain.ScheduledTarget, error)
 }
 
+// IJobQueue defines the operation required to enqueue check jobs.
 type IJobQueue interface {
 	Enqueue(ctx context.Context, job worker.Job) error
 }
 
+// Scheduler periodically claims due targets and enqueues them for checking.
 type Scheduler struct {
 	targetRepo ITargetRepository
 	jobQueue   IJobQueue
 	batchSize  int
 }
 
-func NewScheduler(
-	targetRepo ITargetRepository,
-	jobQueue IJobQueue,
-	batchSize int,
-) *Scheduler {
+func NewScheduler(targetRepo ITargetRepository, jobQueue IJobQueue, batchSize int) *Scheduler {
 	return &Scheduler{
 		targetRepo: targetRepo,
 		jobQueue:   jobQueue,
@@ -38,6 +35,7 @@ func NewScheduler(
 	}
 }
 
+// Run starts the scheduling loop and stops when the context is canceled.
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()

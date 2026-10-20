@@ -21,6 +21,8 @@ type INotifier interface {
 	Send(ctx context.Context, chatID int64, message string) error
 }
 
+// CreateAlertUseCase creates incident alerts with distributed
+// deduplication and delivers newly created alerts to the user.
 type CreateAlertUseCase struct {
 	alertRepo    IAlertRepository
 	userRepo     IUserRepository
@@ -28,12 +30,7 @@ type CreateAlertUseCase struct {
 	deduplicator IAlertDeduplicator
 }
 
-func NewCreateAlertUseCase(
-	alertRepo IAlertRepository,
-	userRepo IUserRepository,
-	notifier INotifier,
-	deduplicator IAlertDeduplicator,
-) *CreateAlertUseCase {
+func NewCreateAlertUseCase(alertRepo IAlertRepository, userRepo IUserRepository, notifier INotifier, deduplicator IAlertDeduplicator) *CreateAlertUseCase {
 	return &CreateAlertUseCase{
 		alertRepo:    alertRepo,
 		userRepo:     userRepo,
@@ -42,13 +39,9 @@ func NewCreateAlertUseCase(
 	}
 }
 
-func (uc *CreateAlertUseCase) CreateAlert(
-	ctx context.Context,
-	incidentID int,
-	userID int,
-	alertType string,
-	message string,
-) error {
+// CreateAlert validates and claims an alert, persists it idempotently,
+// and notifies the incident owner when the alert is newly created.
+func (uc *CreateAlertUseCase) CreateAlert(ctx context.Context, incidentID int, userID int, alertType string, message string) error {
 	const dedupTTL = 10 * time.Minute
 
 	alert := &domain.Alert{
@@ -112,12 +105,7 @@ func (uc *CreateAlertUseCase) CreateAlert(
 	return nil
 }
 
-func (uc *CreateAlertUseCase) releaseClaim(
-	ctx context.Context,
-	incidentID int,
-	alertType string,
-	originalErr error,
-) error {
+func (uc *CreateAlertUseCase) releaseClaim(ctx context.Context, incidentID int, alertType string, originalErr error) error {
 	releaseCtx := context.WithoutCancel(ctx)
 
 	if err := uc.deduplicator.Release(

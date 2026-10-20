@@ -8,16 +8,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// TargetRepository provides PostgreSQL persistence for targets.
 type TargetRepository struct {
 	pool *pgxpool.Pool
 }
 
+// NewTargetRepository creates a new TargetRepository backed by PostgreSQL.
 func NewTargetRepository(pool *pgxpool.Pool) *TargetRepository {
 	return &TargetRepository{
 		pool: pool,
 	}
 }
 
+// Save inserts a new target and populates its database-generated fields.
 func (r *TargetRepository) Save(ctx context.Context, target *domain.Target) error {
 	query := `
     INSERT INTO targets (
@@ -52,6 +55,8 @@ func (r *TargetRepository) Save(ctx context.Context, target *domain.Target) erro
 	}
 	return nil
 }
+
+// GetByID returns a target by its ID.
 func (r *TargetRepository) GetByID(ctx context.Context, id int) (*domain.Target, error) {
 	query := `
     SELECT
@@ -100,6 +105,7 @@ func (r *TargetRepository) GetByID(ctx context.Context, id int) (*domain.Target,
 	return target, nil
 }
 
+// ListByUserID returns all targets owned by the specified user.
 func (r *TargetRepository) ListByUserID(ctx context.Context, userID int) ([]domain.Target, error) {
 	query := `
 	SELECT
@@ -159,6 +165,7 @@ func (r *TargetRepository) ListByUserID(ctx context.Context, userID int) ([]doma
 	return targets, nil
 }
 
+// Delete removes a target by its ID.
 func (r *TargetRepository) Delete(ctx context.Context, id int) error {
 	query := `
 		DELETE FROM targets
@@ -169,10 +176,8 @@ func (r *TargetRepository) Delete(ctx context.Context, id int) error {
 	return err
 }
 
-func (r *TargetRepository) Update(
-	ctx context.Context,
-	target *domain.Target,
-) error {
+// Update persists the editable settings of an existing target.
+func (r *TargetRepository) Update(ctx context.Context, target *domain.Target) error {
 	query := `
 		UPDATE targets
 	SET
@@ -201,10 +206,8 @@ func (r *TargetRepository) Update(
 
 }
 
-func (r *TargetRepository) Pause(
-	ctx context.Context,
-	id int,
-) error {
+// Pause disables scheduled checks for a target.
+func (r *TargetRepository) Pause(ctx context.Context, id int) error {
 	query := `
 		UPDATE targets
 		SET active = FALSE
@@ -220,10 +223,8 @@ func (r *TargetRepository) Pause(
 	return err
 }
 
-func (r *TargetRepository) Resume(
-	ctx context.Context,
-	id int,
-) error {
+// Resume enables scheduled checks for a target.
+func (r *TargetRepository) Resume(ctx context.Context, id int) error {
 	query := `
 		UPDATE targets
 		SET active = TRUE
@@ -239,10 +240,9 @@ func (r *TargetRepository) Resume(
 	return err
 }
 
-func (r *TargetRepository) ClaimDueTargets(
-	ctx context.Context,
-	limit int,
-) ([]domain.ScheduledTarget, error) {
+// ClaimDueTargets atomically claims targets that are due for checking,
+// advances their next check time, and returns their original scheduled time.
+func (r *TargetRepository) ClaimDueTargets(ctx context.Context, limit int) ([]domain.ScheduledTarget, error) {
 	query := `
 		WITH due AS (
 			SELECT id, next_check_at

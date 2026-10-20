@@ -6,10 +6,10 @@ import (
 	"errors"
 )
 
+// ICheckHistoryRepository defines the storage operation required to retrieve recent checks.
 type ICheckHistoryRepository interface {
 	GetLastChecks(ctx context.Context, targetID int, limit int) ([]domain.Check, error)
 }
-
 type GetCheckHistoryUseCase struct {
 	checkRepo ICheckHistoryRepository
 }

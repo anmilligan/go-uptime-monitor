@@ -24,6 +24,7 @@ func NewListIncidentsUseCase(incidentRepo IListIncidentsRepository) *ListInciden
 	}
 }
 
+// ListIncidents returns the most recent incidents for the specified target.
 func (uc *ListIncidentsUseCase) ListIncidents(ctx context.Context, targetID int, limit int) ([]domain.Incident, error) {
 	if targetID <= 0 {
 		return nil, errors.New(
