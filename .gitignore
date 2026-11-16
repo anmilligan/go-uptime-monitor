@@ -1,7 +1,8 @@
-welcome-to-docker/
 .env
 monitor
 uptime-monitor
 escape-analysis.txt
 grafana-backup/
 before-goose-baseline.sql
+# JetBrains IDE
+.idea/

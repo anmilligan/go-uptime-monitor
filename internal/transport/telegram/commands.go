@@ -128,12 +128,7 @@ func (b *Bot) handleList(ctx context.Context, message *tgbotapi.Message) error {
 
 // handleListForUser builds and sends a compact summary of all monitors
 // owned by the specified Telegram user.
-func (b *Bot) handleListForUser(
-	ctx context.Context,
-	chatID int64,
-	telegramUserID int64,
-	username string,
-) error {
+func (b *Bot) handleListForUser(ctx context.Context, chatID int64, telegramUserID int64, username string) error {
 	user, err := b.register.Register(
 		ctx,
 		telegramUserID,
@@ -269,10 +264,7 @@ func (b *Bot) handleListForUser(
 
 // handleStatus handles the /status command and sends
 // the current state of a monitor owned by the user.
-func (b *Bot) handleStatus(
-	ctx context.Context,
-	message *tgbotapi.Message,
-) error {
+func (b *Bot) handleStatus(ctx context.Context, message *tgbotapi.Message) error {
 	targetID, userMessage :=
 		parseMonitorIDArgument(
 			message,

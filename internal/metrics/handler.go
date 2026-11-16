@@ -9,12 +9,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// IMonitorStatusRepository defines the metrics data queries
+// required by the Prometheus HTTP handler.
 type IMonitorStatusRepository interface {
 	GetMonitorStatusCounts(ctx context.Context) (map[string]int, error)
 	GetOpenIncidentsCount(ctx context.Context) (int, error)
 	GetMonitorCreatedAt(ctx context.Context) (map[int]time.Time, error)
 }
 
+// ICalculateUptimeUseCase defines uptime calculation
+// required for Prometheus uptime metrics.
+type ICalculateUptimeUseCase interface {
+	CalculateUptime(ctx context.Context, targetID int, targetCreatedAt time.Time, period time.Duration) (*usecase.UptimeResult, error)
+}
+
+// Handler creates an HTTP handler that collects current application metrics
+// and exposes them in Prometheus format.
 func Handler(repo IMonitorStatusRepository, uptime ICalculateUptimeUseCase) http.Handler {
 	prometheusHandler := promhttp.Handler()
 
@@ -101,8 +111,4 @@ func Handler(repo IMonitorStatusRepository, uptime ICalculateUptimeUseCase) http
 			prometheusHandler.ServeHTTP(w, r)
 		},
 	)
-}
-
-type ICalculateUptimeUseCase interface {
-	CalculateUptime(ctx context.Context, targetID int, targetCreatedAt time.Time, period time.Duration) (*usecase.UptimeResult, error)
 }

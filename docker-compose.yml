@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
@@ -46,7 +46,7 @@ services:
     container_name: uptime-monitor-redis
 
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -75,7 +75,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
 
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
     depends_on:
       postgres:
@@ -112,7 +112,7 @@ services:
       - prometheus_data:/prometheus
 
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
 
     depends_on:
       uptime-monitor:
@@ -139,7 +139,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
 
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
     volumes:
       - grafana_data:/var/lib/grafana
@@ -159,5 +159,4 @@ services:
 volumes:
   postgres_data:
   prometheus_data:
-
   grafana_data:

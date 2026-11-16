@@ -10,13 +10,12 @@ type IDatabasePinger interface {
 	Ping(ctx context.Context) error
 }
 
+// HealthHandler handles application health and readiness checks.
 type HealthHandler struct {
 	db IDatabasePinger
 }
 
-func NewHealthHandler(
-	db IDatabasePinger,
-) *HealthHandler {
+func NewHealthHandler(db IDatabasePinger) *HealthHandler {
 	return &HealthHandler{
 		db: db,
 	}
@@ -26,10 +25,8 @@ type healthResponse struct {
 	Status string `json:"status"`
 }
 
-func (h *HealthHandler) Health(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+// Health reports whether the application process is running.
+func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(
 		"Content-Type",
 		"application/json",
@@ -44,10 +41,9 @@ func (h *HealthHandler) Health(
 	}
 }
 
-func (h *HealthHandler) Ready(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+// Ready reports whether the application is ready to serve requests
+// by checking the database connection.
+func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(
 		"Content-Type",
 		"application/json",

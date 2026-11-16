@@ -51,6 +51,7 @@ type ICalculateUptimeUseCase interface {
 	CalculateUptime(ctx context.Context, targetID int, targetCreatedAt time.Time, period time.Duration) (*usecase.UptimeResult, error)
 }
 
+// TargetHandler handles REST operations for monitor targets.
 type TargetHandler struct {
 	addTarget     IAddTargetUseCase
 	getTarget     IGetTargetUseCase
@@ -64,6 +65,7 @@ type TargetHandler struct {
 	listIncidents IListIncidentsUseCase
 }
 
+// NewTargetHandler creates a REST handler with the required use case dependencies.
 func NewTargetHandler(
 	addTarget IAddTargetUseCase,
 	getTarget IGetTargetUseCase,
@@ -90,6 +92,7 @@ func NewTargetHandler(
 	}
 }
 
+// List returns all targets belonging to the user specified by the user_id query parameter.
 func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	userIDParam := r.URL.Query().Get("user_id")
 
@@ -110,6 +113,8 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetByID returns detailed information about a target,
+// including its current status, latest check, open incident, and uptime.
 func (h *TargetHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
@@ -293,6 +298,8 @@ type createTargetRequest struct {
 	ExpectedBody    string `json:"expected_body"`
 }
 
+// Create parses a target creation request,
+// delegates creation to the use case, and returns the created target.
 func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createTargetRequest
 
@@ -323,6 +330,7 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Delete removes the target identified by the id URL parameter.
 func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
@@ -349,6 +357,8 @@ type updateTargetRequest struct {
 	ExpectedBody    *string `json:"expected_body"`
 }
 
+// applyTargetUpdate applies only the fields provided
+// in a partial target update request.
 func applyTargetUpdate(target *domain.Target, req updateTargetRequest) {
 	if req.Kind != nil {
 		target.Kind = *req.Kind
@@ -374,6 +384,9 @@ func applyTargetUpdate(target *domain.Target, req updateTargetRequest) {
 		target.ExpectedBody = *req.ExpectedBody
 	}
 }
+
+// Update applies partial changes to an existing target
+// and returns the updated target as JSON.
 func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
@@ -456,10 +469,9 @@ type targetDetailsResponse struct {
 	OpenIncident *incidentResponse `json:"open_incident"`
 }
 
-func (h *TargetHandler) GetChecks(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+// GetChecks returns recent check history for a target,
+// limited by the optional limit query parameter.
+func (h *TargetHandler) GetChecks(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
 	targetID, err := strconv.Atoi(idParam)
@@ -531,10 +543,9 @@ func (h *TargetHandler) GetChecks(
 	}
 }
 
-func (h *TargetHandler) GetIncidents(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+// GetIncidents returns recent incidents for a target,
+// limited by the optional limit query parameter.
+func (h *TargetHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 
 	targetID, err := strconv.Atoi(idParam)
