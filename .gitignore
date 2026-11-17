@@ -6,3 +6,5 @@ grafana-backup/
 before-goose-baseline.sql
 # JetBrains IDE
 .idea/
+# JetBrains project files
+*.iml
